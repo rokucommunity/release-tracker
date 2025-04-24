@@ -203,6 +203,9 @@
 		projects = projects;
 	}
 
+	//temporarily only keep one of the projects to keep our rate limit down during testing
+	projects = projects.filter((x) => ['brighterscript', 'roku-deploy'].includes(x.name));
+
 	hydrateAllProjects();
 </script>
 
@@ -224,7 +227,8 @@
 								<a
 									target="_blank"
 									href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}
-									>{dependency.name}</a>@{dependency.currentVersion} (v{dProject?.currentVersion} available)
+									>{dependency.name}</a
+								>@{dependency.currentVersion} (v{dProject?.currentVersion} available)
 							</li>
 						{/each}
 					</ul>
