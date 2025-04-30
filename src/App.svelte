@@ -126,22 +126,34 @@
 							{/if}
 						</div>
 					</div>
-					{#if project.dependencies.length > 0}
-						<h3>Dependencies:</h3>
-						<ul>
+					<h3>Dependencies:</h3>
+					<ul>
+						{#if project.dependencies.length > 0}
 							{#each project.dependencies as dependency}
 								{@const dProject = projects.find((x) => x.name === dependency.name)}
 								<li>
 									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
 										{dependency.name}
-									</a>@{dependency.currentVersion}
+									</a>@<a
+										target="_blank"
+										href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dependency?.currentVersion}`}
+									>
+										{dependency?.currentVersion}
+									</a>
 									{#if dependency.currentVersion && dProject?.currentVersion !== dependency?.currentVersion}
-										=> {dProject?.currentVersion}
+										⇒
+										<a
+											target="_blank"
+											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
+											>{dProject?.currentVersion}
+										</a>
 									{/if}
 								</li>
 							{/each}
-						</ul>
-					{/if}
+						{:else}
+							<li><i style="color: grey">No dependencies</i></li>
+						{/if}
+					</ul>
 				</div>
 			{/each}
 		</div>
@@ -215,8 +227,7 @@
 
 	a,
 	a:visited {
-		text-decoration: none;
-		color: white;
+		color: rgb(158, 158, 255);
 	}
 
 	.cards-container {
@@ -233,8 +244,8 @@
 		border-radius: 8px;
 		padding: 1rem;
 		padding-top: 1.5rem;
+		min-width: 300px;
 		background-color: #1e2934;
-		width: 300px;
 		word-wrap: break-word;
 	}
 
