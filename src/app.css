@@ -18,3 +18,11 @@ body {
   padding: 0;
   margin: 0;
 }
+
+button {
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}

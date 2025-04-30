@@ -4,6 +4,11 @@
 
 	let projects = getAllProjects();
 
+	/**
+	 * When clicking on a project's "update required" button, this is the project you clicked the button for.
+	 */
+	let selectedProjectForUpdate: Project | undefined;
+
 	const octokit = new Octokit({});
 
 	async function hydrateProject(project: Project) {
@@ -65,6 +70,20 @@
 		});
 	}
 
+	function dispatchRelease(project: Project) {
+		//TODO dispatch a release PR to the project
+		console.log(`Dispatching release for ${project.name}`);
+		selectedProjectForUpdate = undefined;
+	}
+
+	function toggleProjectUpdateActive(project: Project | undefined) {
+		if (selectedProjectForUpdate === project) {
+			selectedProjectForUpdate = undefined;
+		} else {
+			selectedProjectForUpdate = project;
+		}
+	}
+
 	//temporarily only keep one of the projects to keep our rate limit down during testing
 	// projects = projects.filter((x) => ['brighterscript', 'roku-deploy'].includes(x.name));
 
@@ -90,8 +109,18 @@
 						<span>
 							Version: {project.currentVersion}
 						</span>
-						<div class="button {project.updateRequired ? 'danger' : 'success'}">
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div
+							class="button {project.updateRequired ? 'danger update-required' : 'success'}"
+							on:click={() => toggleProjectUpdateActive(project)}
+						>
 							{project.updateRequired ? 'Update Required' : 'Up-to-date'}
+							<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
+								<button class="button major" on:click={() => dispatchRelease(project)}> major </button>
+								<button class="button minor" on:click={() => dispatchRelease(project)}> minor </button>
+								<button class="button patch" on:click={() => dispatchRelease(project)}> patch </button>
+								<button class="button prerelease" on:click={() => dispatchRelease(project)}> prerelease </button>
+							</div>
 						</div>
 					</div>
 					{#if project.dependencies.length > 0}
@@ -183,6 +212,36 @@
 		padding: 0;
 	}
 
+	.update-required {
+		position: relative; /* Parent must have `position: relative` */
+	}
+
+	.update-required .update-actions {
+		position: absolute;
+		top: 200%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		background-color: grey;
+		padding: 10px;
+		display: flex;
+		gap: 0.5rem;
+		border-radius: 4px;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	.update-required .update-actions::before {
+		content: '';
+		position: absolute;
+		bottom: 100%; /* Position the caret above the tooltip */
+		left: 50%; /* Center the caret horizontally */
+		transform: translateX(-50%); /* Adjust for caret width */
+		width: 0;
+		height: 0;
+		border-left: 8px solid transparent; /* Create the triangle */
+		border-right: 8px solid transparent;
+		border-bottom: 8px solid grey; /* Match the tooltip background color */
+	}
+
 	.project-title {
 		position: relative;
 		margin: 0;
@@ -213,6 +272,18 @@
 		color: white;
 		text-align: center;
 		display: inline-block;
+		cursor: pointer;
+	}
+
+	.button:hover {
+		background-image: linear-gradient(#0000, #0000000d 40%, #0000001a);
+	}
+
+	.button:active {
+		border-color: #000;
+		box-shadow:
+			inset 0 0 0 1px #00000026,
+			inset 0 0 6px #0003;
 	}
 
 	/* Success Button (Green) */
@@ -223,5 +294,25 @@
 	/* Danger Button (Red) */
 	.button.danger {
 		background-color: #a2303b;
+	}
+
+	.button.major {
+		background-color: #dc3545; /* Red for major */
+		color: white;
+	}
+
+	.button.minor {
+		background-color: #007bff; /* Blue for minor */
+		color: white;
+	}
+
+	.button.patch {
+		background-color: #28a745; /* Green for patch */
+		color: white;
+	}
+
+	.button.prerelease {
+		background-color: #fd7e14; /* Orange for pre-release */
+		color: white;
 	}
 </style>
