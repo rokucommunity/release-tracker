@@ -90,7 +90,7 @@
 						<span>
 							Version: {project.currentVersion}
 						</span>
-						<div class="update-tag" class:is-green={!project.updateRequired} class:is-red={project.updateRequired}>
+						<div class="button {project.updateRequired ? 'danger' : 'success'}">
 							{project.updateRequired ? 'Update Required' : 'Up-to-date'}
 						</div>
 					</div>
@@ -183,22 +183,6 @@
 		padding: 0;
 	}
 
-	.update-tag {
-		padding: 0.25rem 0.5rem;
-		border-radius: 4px;
-		font-size: 0.875rem;
-		font-weight: bold;
-		color: white;
-	}
-
-	.update-tag.is-green {
-		background-color: #3f844f;
-	}
-
-	.update-tag.is-red {
-		background-color: #a2303b;
-	}
-
 	.project-title {
 		position: relative;
 		margin: 0;
@@ -208,7 +192,7 @@
 	}
 
 	.project-title .prefix {
-		color: #aaa; /* Lighter grey for less significance */
+		color: #888; /* Lighter grey for less significance */
 		font-size: 0.9rem; /* Slightly smaller font size */
 		position: absolute;
 		top: -0.8rem; /* Offset higher */
@@ -217,5 +201,27 @@
 
 	.project-title .main-title {
 		display: inline-block;
+		padding-bottom: 4px;
+	}
+
+	/* General Button Styles */
+	.button {
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.875rem;
+		font-weight: bold;
+		color: white;
+		text-align: center;
+		display: inline-block;
+	}
+
+	/* Success Button (Green) */
+	.button.success {
+		background-color: #3f844f;
+	}
+
+	/* Danger Button (Red) */
+	.button.danger {
+		background-color: #a2303b;
 	}
 </style>
