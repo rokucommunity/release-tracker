@@ -1,162 +1,8 @@
 <script lang="ts">
 	import { Octokit, App } from 'octokit';
+	import { type Project, getAllProjects } from './projects';
 
-	interface Project {
-		/**
-		 * The name of the project
-		 */
-		name: string;
-
-		/**
-		 * The current version of the project (as of the master branch latest package.json)
-		 */
-		currentVersion?: string;
-
-		/**
-		 * Whether an update is required for this project
-		 */
-		updateRequired?: boolean;
-
-		/**
-		 * The owner and repository name of the project on GitHub
-		 */
-		repository: {
-			owner: string;
-			repository: string;
-		};
-		/**
-		 * List of other RokuCommunity dependencies this project depends on. This is used to determine the order of releases
-		 * and to determine if a project needs a new release.
-		 */
-		dependencies: Array<{
-			name: string;
-			/**
-			 * The version of the dependency that this project last released with
-			 */
-			currentVersion?: string;
-		}>;
-	}
-
-	let projects: Project[] = [
-		{
-			name: 'roku-deploy',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'roku-deploy'
-			},
-			dependencies: []
-		},
-		{
-			name: '@rokucommunity/logger',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'logger'
-			},
-			dependencies: []
-		},
-		{
-			name: '@rokucommunity/bslib',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'logger'
-			},
-			dependencies: []
-		},
-		{
-			name: 'brighterscript',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'brighterscript'
-			},
-			dependencies: [{ name: '@rokucommunity/bslib' }, { name: '@rokucommunity/logger' }, { name: 'roku-deploy' }]
-		},
-		{
-			name: 'roku-debug',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'roku-debug'
-			},
-			dependencies: [{ name: 'brighterscript' }, { name: '@rokucommunity/logger' }, { name: 'roku-deploy' }]
-		},
-		{
-			name: 'brighterscript-formatter',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'brighterscript-formatter'
-			},
-			dependencies: [{ name: 'brighterscript' }]
-		},
-		{
-			name: '@rokucommunity/bslint',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'bslint'
-			},
-			dependencies: [{ name: 'brighterscript' }]
-		},
-		{
-			name: '@rokucommunity/brs',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'brs'
-			},
-			dependencies: []
-		},
-		{
-			name: 'ropm',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'brs'
-			},
-			dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
-		},
-		{
-			name: 'roku-report-analyzer',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'roku-report-analyzer'
-			},
-			dependencies: [{ name: '@rokucommunity/logger' }, { name: 'brighterscript' }]
-		},
-		{
-			name: 'vscode-brightscript-language',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'vscode-brightscript-language'
-			},
-			dependencies: [
-				{ name: 'roku-deploy' },
-				{ name: 'roku-debug' },
-				{ name: 'brighterscript' },
-				{ name: 'brighterscript-formatter' },
-				{ name: '@rokucommunity/logger' }
-			]
-		},
-		{
-			name: 'roku-promise',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'roku-promise'
-			},
-			dependencies: [{ name: 'brighterscript' }]
-		},
-		{
-			name: '@rokucommunity/promises',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'promises'
-			},
-			dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
-		},
-		{
-			name: 'rooibos-roku',
-			repository: {
-				owner: 'rokucommunity',
-				repository: 'rooibos'
-			},
-			dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
-		}
-	];
+	let projects = getAllProjects();
 
 	const octokit = new Octokit({});
 
@@ -226,59 +72,88 @@
 </script>
 
 <main>
-	<h1>RokuCommunity Project Dependencies</h1>
-	<p>This is a list of all the projects in the RokuCommunity and their dependencies.</p>
-	<div class="cards-container">
-		{#each projects as project}
-			<div class="card">
-				<h2>
-					<a href={`https://github.com/${project.repository.owner}/${project.repository.repository}`} target="_blank">
-						{project.name}
-					</a>
-				</h2>
-				<div class="version-row">
-					<span>
-						Version: {project.currentVersion}
-					</span>
-					<div class="update-tag" class:is-green={!project.updateRequired} class:is-red={project.updateRequired}>
-						{project.updateRequired ? 'Update Required' : 'Up-to-date'}
+	<header class="navbar">
+		<h1>RokuCommunity Release Tracker</h1>
+	</header>
+	<div class="content">
+		<p>This is a list of all the projects in the RokuCommunity and their dependencies.</p>
+		<div class="cards-container">
+			{#each projects as project}
+				<div class="card">
+					<h2 class="project-title">
+						{#if project.name.startsWith('@')}
+							<span class="prefix">{project.name.split('/')[0]}/</span>
+						{/if}
+						<span class="main-title">{project.name.replace('@rokucommunity/', '')}</span>
+					</h2>
+					<div class="version-row">
+						<span>
+							Version: {project.currentVersion}
+						</span>
+						<div class="update-tag" class:is-green={!project.updateRequired} class:is-red={project.updateRequired}>
+							{project.updateRequired ? 'Update Required' : 'Up-to-date'}
+						</div>
 					</div>
+					{#if project.dependencies.length > 0}
+						<h3>Dependencies:</h3>
+						<ul>
+							{#each project.dependencies as dependency}
+								{@const dProject = projects.find((x) => x.name === dependency.name)}
+								<li>
+									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
+										{dependency.name}
+									</a>@{dependency.currentVersion} (v{dProject?.currentVersion} available)
+								</li>
+							{/each}
+						</ul>
+					{/if}
 				</div>
-				{#if project.dependencies.length > 0}
-					<h3>Dependencies:</h3>
-					<ul>
-						{#each project.dependencies as dependency}
-							{@const dProject = projects.find((x) => x.name === dependency.name)}
-							<li>
-								<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
-									{dependency.name}
-								</a>@{dependency.currentVersion} (v{dProject?.currentVersion} available)
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		{/each}
+			{/each}
+		</div>
 	</div>
 </main>
 
 <style>
-	a {
-		text-decoration: none;
+	.content {
+		margin: 8px;
 	}
+	/* Navbar Styles */
+	.navbar {
+		background-color: rgb(88, 27, 152);
+		color: white;
+		padding: 1rem;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.navbar h1 {
+		margin: 0;
+		font-size: 1.5rem;
+	}
+
+	a,
+	a:visited {
+		text-decoration: none;
+		color: white;
+	}
+
 	.cards-container {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 1rem;
+		padding: 1rem;
 	}
 
 	.card {
-		position: relative;
-		border: 1px solid #ccc;
+		box-sizing: border-box;
+		border: 2px solid grey;
 		border-radius: 8px;
 		padding: 1rem;
+		padding-top: 1.5rem;
+		background-color: #1e2934;
 		width: 300px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		word-wrap: break-word;
 	}
 
 	.card h2 {
@@ -304,8 +179,8 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin: 0; /* Remove all margins */
-		padding: 0; /* Remove all padding */
+		margin: 0;
+		padding: 0;
 	}
 
 	.update-tag {
@@ -317,10 +192,30 @@
 	}
 
 	.update-tag.is-green {
-		background-color: #4db064; /* Green */
+		background-color: #3f844f;
 	}
 
 	.update-tag.is-red {
-		background-color: #dc3545; /* Red */
+		background-color: #a2303b;
+	}
+
+	.project-title {
+		position: relative;
+		margin: 0;
+		padding: 0;
+		font-size: 1.25rem;
+		line-height: 1.2;
+	}
+
+	.project-title .prefix {
+		color: #aaa; /* Lighter grey for less significance */
+		font-size: 0.9rem; /* Slightly smaller font size */
+		position: absolute;
+		top: -0.8rem; /* Offset higher */
+		left: 0;
+	}
+
+	.project-title .main-title {
+		display: inline-block;
 	}
 </style>
