@@ -77,7 +77,10 @@
 	}
 
 	function toggleProjectUpdateActive(project: Project | undefined) {
-		if (selectedProjectForUpdate === project) {
+		if (project?.updateRequired === false) {
+			selectedProjectForUpdate = undefined;
+		}
+		if (project?.updateRequired !== true || selectedProjectForUpdate === project) {
 			selectedProjectForUpdate = undefined;
 		} else {
 			selectedProjectForUpdate = project;
@@ -98,30 +101,27 @@
 		<p>This is a list of all the projects in the RokuCommunity and their dependencies.</p>
 		<div class="cards-container">
 			{#each projects as project}
-				<div class="card">
+				<div class="card {project.updateRequired ? 'update-available' : 'no-updates'}">
 					<h2 class="project-title">
-						{#if project.name.startsWith('@')}
-							<span class="prefix">{project.name.split('/')[0]}/</span>
-						{/if}
-						<span class="main-title">{project.name.replace('@rokucommunity/', '')}</span>
+						<span class="status-icon"></span>
+						{project.name.replace('@rokucommunity/', '')}
 					</h2>
 					<div class="version-row">
 						<span>
-							Version: {project.currentVersion}
+							<i>v{project.currentVersion}</i>
 						</span>
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div
-							class="button {project.updateRequired ? 'danger update-required' : 'success'}"
-							on:click={() => toggleProjectUpdateActive(project)}
-						>
-							{project.updateRequired ? 'Update Required' : 'Up-to-date'}
-							<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
-								<button class="button major" on:click={() => dispatchRelease(project)}> major </button>
-								<button class="button minor" on:click={() => dispatchRelease(project)}> minor </button>
-								<button class="button patch" on:click={() => dispatchRelease(project)}> patch </button>
-								<button class="button prerelease" on:click={() => dispatchRelease(project)}> prerelease </button>
+						{#if project.updateRequired}
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+							<div class="button start-release" on:click={() => toggleProjectUpdateActive(project)}>
+								{project.updateRequired ? 'Start release' : ''}
+								<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
+									<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
+									<button class="button minor" on:click={() => dispatchRelease(project)}>minor</button>
+									<button class="button patch" on:click={() => dispatchRelease(project)}>patch</button>
+									<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
+								</div>
 							</div>
-						</div>
+						{/if}
 					</div>
 					{#if project.dependencies.length > 0}
 						<h3>Dependencies:</h3>
@@ -156,6 +156,48 @@
 		align-items: center;
 	}
 
+	.no-updates .button {
+		color: green !important;
+		cursor: default !important;
+		background-color: rgba(0, 0, 0, 0.3) !important;
+	}
+
+	.start-release {
+		position: relative;
+	}
+
+	.button.start-release {
+		background-color: #fd7e14 !important;
+		color: white;
+	}
+
+	.update-available .update-actions {
+		background-color: #3d5369;
+		border: 1px solid #717171;
+		position: absolute;
+		top: 200%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		padding: 10px;
+		display: flex;
+		gap: 0.5rem;
+		border-radius: 4px;
+		box-shadow: 8px 8px 15px rgba(0, 0, 0, 0.8);
+	}
+
+	.update-available .update-actions::before {
+		content: '';
+		position: absolute;
+		bottom: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 0;
+		height: 0;
+		border-left: 8px solid transparent;
+		border-right: 8px solid transparent;
+		border-bottom: 8px solid #3d5369;
+	}
+
 	.navbar h1 {
 		margin: 0;
 		font-size: 1.5rem;
@@ -170,6 +212,7 @@
 	.cards-container {
 		display: flex;
 		flex-wrap: wrap;
+		justify-content: center;
 		gap: 1rem;
 		padding: 1rem;
 	}
@@ -212,58 +255,20 @@
 		padding: 0;
 	}
 
-	.update-required {
-		position: relative; /* Parent must have `position: relative` */
-	}
-
-	.update-required .update-actions {
-		position: absolute;
-		top: 200%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		background-color: grey;
-		padding: 10px;
-		display: flex;
-		gap: 0.5rem;
-		border-radius: 4px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.update-required .update-actions::before {
-		content: '';
-		position: absolute;
-		bottom: 100%; /* Position the caret above the tooltip */
-		left: 50%; /* Center the caret horizontally */
-		transform: translateX(-50%); /* Adjust for caret width */
-		width: 0;
-		height: 0;
-		border-left: 8px solid transparent; /* Create the triangle */
-		border-right: 8px solid transparent;
-		border-bottom: 8px solid grey; /* Match the tooltip background color */
+	.update-available {
+		position: relative;
 	}
 
 	.project-title {
-		position: relative;
-		margin: 0;
 		padding: 0;
 		font-size: 1.25rem;
-		line-height: 1.2;
-	}
-
-	.project-title .prefix {
-		color: #888; /* Lighter grey for less significance */
-		font-size: 0.9rem; /* Slightly smaller font size */
-		position: absolute;
-		top: -0.8rem; /* Offset higher */
-		left: 0;
-	}
-
-	.project-title .main-title {
-		display: inline-block;
-		padding-bottom: 4px;
+		display: flex;
+		align-items: center;
+		gap: 7px;
 	}
 
 	/* General Button Styles */
+	button,
 	.button {
 		padding: 0.25rem 0.5rem;
 		border-radius: 4px;
@@ -286,33 +291,40 @@
 			inset 0 0 6px #0003;
 	}
 
-	/* Success Button (Green) */
-	.button.success {
-		background-color: #3f844f;
-	}
-
-	/* Danger Button (Red) */
-	.button.danger {
-		background-color: #a2303b;
-	}
-
 	.button.major {
-		background-color: #dc3545; /* Red for major */
+		background-color: #dc3545;
 		color: white;
 	}
 
 	.button.minor {
-		background-color: #007bff; /* Blue for minor */
+		background-color: #007bff;
 		color: white;
 	}
 
 	.button.patch {
-		background-color: #28a745; /* Green for patch */
+		background-color: #28a745;
 		color: white;
 	}
 
 	.button.prerelease {
-		background-color: #fd7e14; /* Orange for pre-release */
+		background-color: #fd7e14;
 		color: white;
+	}
+
+	.status-icon {
+		box-sizing: border-box;
+		border-radius: 100%;
+		width: 20px;
+		height: 20px;
+		display: inline;
+	}
+
+	.update-available .status-icon {
+		background-color: #fd7e14;
+		border: 2px solid #fd7e14;
+	}
+
+	.no-updates .status-icon {
+		background-color: green;
 	}
 </style>
