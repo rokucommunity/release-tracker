@@ -52,6 +52,10 @@
 			//temporarily generate dummy data for testing purposes instead of hitting the API
 			//generate a random semver version
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+			for (const dep of project.dependencies) {
+				dep.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+			}
+			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 
 			// await hydrateProject(project);
 		}
@@ -98,7 +102,6 @@
 		<h1>RokuCommunity Release Tracker</h1>
 	</header>
 	<div class="content">
-		<p>This is a list of all the projects in the RokuCommunity and their dependencies.</p>
 		<div class="cards-container">
 			{#each projects as project}
 				<div class="card {project.updateRequired ? 'update-available' : 'no-updates'}">
@@ -110,18 +113,18 @@
 						<span>
 							<i>v{project.currentVersion}</i>
 						</span>
-						{#if project.updateRequired}
-							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-							<div class="button start-release" on:click={() => toggleProjectUpdateActive(project)}>
-								{project.updateRequired ? 'Start release' : ''}
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div class="button release-status-button" on:click={() => toggleProjectUpdateActive(project)}>
+							{project.updateRequired ? 'Start release' : 'Up to date'}
+							{#if project.updateRequired}
 								<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
 									<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
 									<button class="button minor" on:click={() => dispatchRelease(project)}>minor</button>
 									<button class="button patch" on:click={() => dispatchRelease(project)}>patch</button>
 									<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
 								</div>
-							</div>
-						{/if}
+							{/if}
+						</div>
 					</div>
 					{#if project.dependencies.length > 0}
 						<h3>Dependencies:</h3>
@@ -131,7 +134,10 @@
 								<li>
 									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
 										{dependency.name}
-									</a>@{dependency.currentVersion} (v{dProject?.currentVersion} available)
+									</a>@{dependency.currentVersion}
+									{#if dependency.currentVersion && dProject?.currentVersion !== dependency?.currentVersion}
+										=> {dProject?.currentVersion}
+									{/if}
 								</li>
 							{/each}
 						</ul>
@@ -157,16 +163,19 @@
 	}
 
 	.no-updates .button {
-		color: green !important;
 		cursor: default !important;
-		background-color: rgba(0, 0, 0, 0.3) !important;
 	}
 
-	.start-release {
+	.release-status-button {
 		position: relative;
 	}
 
-	.button.start-release {
+	.no-updates .release-status-button {
+		background-color: rgba(0, 0, 0, 0.24) !important;
+		color: green !important;
+	}
+
+	.update-available .release-status-button {
 		background-color: #fd7e14 !important;
 		color: white;
 	}
@@ -175,6 +184,7 @@
 		background-color: #3d5369;
 		border: 1px solid #717171;
 		position: absolute;
+		z-index: 1;
 		top: 200%;
 		left: 50%;
 		transform: translate(-50%, -50%);
