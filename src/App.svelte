@@ -81,6 +81,8 @@
 	}
 
 	function toggleProjectUpdateActive(project: Project | undefined) {
+		//TODO disabled for now since we don't yet support dispatching workflows from this page
+		return;
 		if (project?.updateRequired === false) {
 			selectedProjectForUpdate = undefined;
 		}
@@ -114,7 +116,12 @@
 							<i>v{project.currentVersion}</i>
 						</span>
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div class="button release-status-button" on:click={() => toggleProjectUpdateActive(project)}>
+						<a
+							class="button release-status-button"
+							on:click={() => toggleProjectUpdateActive(project)}
+							target="_blank"
+							href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
+						>
 							{project.updateRequired ? 'Start release' : 'Up to date'}
 							{#if project.updateRequired}
 								<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
@@ -124,7 +131,7 @@
 									<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
 								</div>
 							{/if}
-						</div>
+						</a>
 					</div>
 					<h3>Dependencies:</h3>
 					<ul>
@@ -228,6 +235,7 @@
 	a,
 	a:visited {
 		color: rgb(158, 158, 255);
+		text-decoration: none;
 	}
 
 	.cards-container {
