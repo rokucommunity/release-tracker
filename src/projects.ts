@@ -57,7 +57,7 @@ export function getAllProjects(): Project[] {
       name: '@rokucommunity/bslib',
       repository: {
         owner: 'rokucommunity',
-        repository: 'logger'
+        repository: 'bslib'
       },
       dependencies: []
     },

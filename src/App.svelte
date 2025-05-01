@@ -11,7 +11,7 @@
 	 */
 	let selectedProjectForUpdate: Project | undefined;
 
-	const octokit = new Octokit({});
+	const octokit = new Octokit();
 
 	async function hydrateProject(project: Project) {
 		if (enableTestMode) {
@@ -143,6 +143,7 @@
 						{#if project.dependencies.length > 0}
 							{#each project.dependencies as dependency}
 								{@const dProject = projects.find((x) => x.name === dependency.name)}
+								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.currentVersion}
 								<li>
 									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
 										{dependency.name}
@@ -152,7 +153,7 @@
 									>
 										{dependency?.currentVersion}
 									</a>
-									{#if dependency.currentVersion && dProject?.currentVersion !== dependency?.currentVersion}
+									{#if dependencyVersionIsDifferent}
 										⇒
 										<a
 											target="_blank"
