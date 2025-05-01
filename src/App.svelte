@@ -19,10 +19,10 @@
 	async function hydrateProject(project: Project) {
 		project.isLoading = true;
 
+		//temporarily generate dummy data for testing purposes instead of hitting the API
 		if (enableTestMode) {
 			await sleep(Math.random() * 1000);
 
-			//temporarily generate dummy data for testing purposes instead of hitting the API
 			//generate a random semver version
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 			for (const dep of project.dependencies) {
@@ -37,24 +37,12 @@
 		//TODO fetch list of open PRs and add links for open release PRs
 
 		console.log(`Hydrating ${project.name}`);
-		//I think fetching the package.json from raw.github.com avoids the rate limit, so do that when possible
 		const response = await http.get({
 			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/master/package.json`,
 			//prevent caching of this package.json since it could change at any time
 			cacheBusting: true
 		});
 		const packageJson = JSON.parse(response);
-
-		// //fetch the current package.json from the master branch
-		// const response = await octokit.rest.repos.getContent({
-		// 	mediaType: {
-		// 		format: 'raw',
-		// 	},
-		// 	owner: project.repository.owner,
-		// 	repo: project.repository.repository,
-		// 	path: 'package.json'
-		// });
-		// const packageJson = JSON.parse((response as any).data);
 		project.currentVersion = packageJson.version;
 
 		const tagResponse = await http.get({
@@ -64,22 +52,12 @@
 		});
 		const tagPackageLockJson = JSON.parse(tagResponse);
 
-		// //now fetch the package.json from the latest release
-		// const tagResponse = await octokit.rest.repos.getContent({
-		// 	mediaType: {
-		// 		format: 'raw'
-		// 	},
-		// 	owner: project.repository.owner,
-		// 	repo: project.repository.repository,
-		// 	path: 'package.json',
-		// 	ref: `tags/v${packageJson.version}`
-		// });
-		// const tagPackageJson = JSON.parse((tagResponse as any).data);
-
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
 			dependency.currentVersion ??= tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
 		}
+
+		//fetch the latest patch file
 
 		project.isLoading = false;
 	}
@@ -296,11 +274,11 @@
 	}
 
 	.cards-container {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 1rem;
-		padding: 1rem;
+		display: grid; /* Use CSS Grid */
+		grid-template-columns: repeat(auto-fit, 350px); /* Fixed card width */
+		gap: 1rem; /* Space between cards */
+		justify-content: center; /* Center the grid horizontally */
+		padding: 0 2rem; /* Add padding to the left and right */
 	}
 
 	.card {
