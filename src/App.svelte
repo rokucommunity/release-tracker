@@ -2,12 +2,14 @@
 	import { Octokit, App } from 'octokit';
 	import { type Project, getAllProjects } from './projects';
 	import { hasContext } from 'svelte';
-	import { sleep } from './util';
+	import { createClassFactory, sleep } from './util';
 	import { http } from './http';
 
 	const enableTestMode = false;
 
 	let projects = getAllProjects();
+
+	const getBranchClass = createClassFactory(['branch1', 'branch2', 'branch3', 'branch4', 'branch5', 'branch6', 'branch7']);
 
 	/**
 	 * When clicking on a project's "update required" button, this is the project you clicked the button for.
@@ -129,7 +131,13 @@
 	<div class="content">
 		<div class="cards-container">
 			{#each projects as project}
-				<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
+				<div
+					class="card {project.isLoading !== false
+						? 'loading'
+						: project.updateRequired
+							? 'update-available'
+							: 'no-updates'} {getBranchClass(project.branch)}"
+				>
 					<h2 class="project-title">
 						<span class="status-icon"></span>
 						{project.name.replace('@rokucommunity/', '')}
@@ -191,6 +199,7 @@
 							<li><i style="color: grey">No dependencies</i></li>
 						{/if}
 					</ul>
+					<div class="branch-name">{project.branch}</div>
 				</div>
 			{/each}
 		</div>
@@ -291,6 +300,7 @@
 		width: 350px;
 		background-color: #1e2934;
 		word-wrap: break-word;
+		position: relative;
 	}
 
 	.card h2 {
@@ -408,5 +418,21 @@
 		100% {
 			opacity: 1;
 		}
+	}
+
+	.branch-name {
+		position: absolute;
+		bottom: 0.5rem;
+		right: 0.5rem;
+		border-radius: 5px;
+		padding-top: 0px;
+		padding-bottom: 2px;
+		padding-left: 5px;
+		padding-right: 5px;
+		font-size: .75rem;
+	}
+
+	.branch1 .branch-name {
+		background-color: #1666d6;
 	}
 </style>

@@ -1,4 +1,3 @@
-
 export interface Project {
   /**
    * The name of the project
@@ -14,6 +13,11 @@ export interface Project {
    * Whether an update is required for this project
    */
   updateRequired?: boolean;
+
+  /**
+   * The main branch this project is being developed on
+   */
+  branch: string;
 
   /**
    * The owner and repository name of the project on GitHub
@@ -48,6 +52,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-deploy'
       },
+      branch: 'master',
       dependencies: []
     },
     {
@@ -56,6 +61,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'logger'
       },
+      branch: 'master',
       dependencies: []
     },
     {
@@ -64,6 +70,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'bslib'
       },
+      branch: 'master',
       dependencies: []
     },
     {
@@ -72,6 +79,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brighterscript'
       },
+      branch: 'master',
       dependencies: [{ name: '@rokucommunity/bslib' }, { name: '@rokucommunity/logger' }, { name: 'roku-deploy' }]
     },
     {
@@ -80,6 +88,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-debug'
       },
+      branch: 'master',
       dependencies: [{ name: 'brighterscript' }, { name: '@rokucommunity/logger' }, { name: 'roku-deploy' }]
     },
     {
@@ -88,6 +97,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brighterscript-formatter'
       },
+      branch: 'master',
       dependencies: [{ name: 'brighterscript' }]
     },
     {
@@ -96,6 +106,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'bslint'
       },
+      branch: 'master',
       dependencies: [{ name: 'brighterscript' }]
     },
     {
@@ -104,6 +115,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brs'
       },
+      branch: 'master',
       dependencies: []
     },
     {
@@ -112,6 +124,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brs'
       },
+      branch: 'master',
       dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
     },
     {
@@ -120,6 +133,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-report-analyzer'
       },
+      branch: 'master',
       dependencies: [{ name: '@rokucommunity/logger' }, { name: 'brighterscript' }]
     },
     {
@@ -128,6 +142,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'vscode-brightscript-language'
       },
+      branch: 'master',
       dependencies: [
         { name: 'roku-deploy' },
         { name: 'roku-debug' },
@@ -142,6 +157,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-promise'
       },
+      branch: 'master',
       dependencies: [{ name: 'brighterscript' }]
     },
     {
@@ -150,6 +166,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'promises'
       },
+      branch: 'master',
       dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
     },
     {
@@ -158,6 +175,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'rooibos'
       },
+      branch: 'master',
       dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
     }
   ];
