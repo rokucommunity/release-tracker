@@ -33,6 +33,11 @@ export interface Project {
      */
     currentVersion?: string;
   }>;
+
+  /**
+   * Is the project currently having its data fetched?
+   */
+  isLoading?: boolean;
 }
 
 export function getAllProjects(): Project[] {

@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { Octokit, App } from 'octokit';
 	import { type Project, getAllProjects } from './projects';
+	import { hasContext } from 'svelte';
+	import { sleep } from './util';
+	import { http } from './http';
 
-	const enableTestMode = true;
+	const enableTestMode = false;
 
 	let projects = getAllProjects();
 
@@ -14,7 +17,11 @@
 	const octokit = new Octokit();
 
 	async function hydrateProject(project: Project) {
+		project.isLoading = true;
+
 		if (enableTestMode) {
+			await sleep(Math.random() * 1000);
+
 			//temporarily generate dummy data for testing purposes instead of hitting the API
 			//generate a random semver version
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
@@ -22,53 +29,59 @@
 				dep.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 			}
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+
+			project.isLoading = false;
 			return;
 		}
 
 		//TODO fetch list of open PRs and add links for open release PRs
 
 		console.log(`Hydrating ${project.name}`);
-		//fetch the current package.json from the master branch
-		const response = await octokit.rest.repos.getContent({
-			mediaType: {
-				format: 'raw'
-			},
-			owner: project.repository.owner,
-			repo: project.repository.repository,
-			path: 'package.json'
+		//I think fetching the package.json from raw.github.com avoids the rate limit, so do that when possible
+		const response = await http.get({
+			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/master/package.json`,
+			//prevent caching of this package.json since it could change at any time
+			cacheBusting: true
 		});
-		const packageJson = JSON.parse((response as any).data);
+		const packageJson = JSON.parse(response);
+
+		// //fetch the current package.json from the master branch
+		// const response = await octokit.rest.repos.getContent({
+		// 	mediaType: {
+		// 		format: 'raw',
+		// 	},
+		// 	owner: project.repository.owner,
+		// 	repo: project.repository.repository,
+		// 	path: 'package.json'
+		// });
+		// const packageJson = JSON.parse((response as any).data);
 		project.currentVersion = packageJson.version;
 
-		//now fetch the package.json from the latest release
-		const tagResponse = await octokit.rest.repos.getContent({
-			mediaType: {
-				format: 'raw'
-			},
-			owner: project.repository.owner,
-			repo: project.repository.repository,
-			path: 'package.json',
-			ref: `tags/v${packageJson.version}`
+		const tagResponse = await http.get({
+			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/tags/v${packageJson.version}/package-lock.json`,
+			//this request can be cached since files from tag refs should never change
+			cacheInLocalStorage: true
 		});
-		const tagPackageJson = JSON.parse((tagResponse as any).data);
+		const tagPackageLockJson = JSON.parse(tagResponse);
+
+		// //now fetch the package.json from the latest release
+		// const tagResponse = await octokit.rest.repos.getContent({
+		// 	mediaType: {
+		// 		format: 'raw'
+		// 	},
+		// 	owner: project.repository.owner,
+		// 	repo: project.repository.repository,
+		// 	path: 'package.json',
+		// 	ref: `tags/v${packageJson.version}`
+		// });
+		// const tagPackageJson = JSON.parse((tagResponse as any).data);
 
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
-			if (tagPackageJson?.dependencies?.[dependency?.name]) {
-				dependency.currentVersion = tagPackageJson.dependencies[dependency.name];
-			}
-		}
-	}
-
-	async function hydrateAllProjects() {
-		for (const project of projects) {
-			await hydrateProject(project);
+			dependency.currentVersion ??= tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
 		}
 
-		for (const project of projects) {
-			computeProjectNeedsUpdate(project);
-		}
-		projects = projects;
+		project.isLoading = false;
 	}
 
 	function computeProjectNeedsUpdate(project: Project) {
@@ -98,8 +111,35 @@
 		}
 	}
 
+	async function hydrateAllProjects() {
+		//sort the projects so that dependency projects are always hydrated before the projects that depend on them
+		const sortedProjects = [...projects].sort((a, b) => {
+			const aDependencies = a.dependencies.map((x) => x.name);
+			const bDependencies = b.dependencies.map((x) => x.name);
+			if (aDependencies.includes(b.name)) {
+				return 1;
+			}
+			if (bDependencies.includes(a.name)) {
+				return -1;
+			}
+			return 0;
+		});
+		for (const project of sortedProjects) {
+			await hydrateProject(project);
+			computeProjectNeedsUpdate(project);
+			//trigger reactivity after every project hydration
+			projects = projects;
+		}
+
+		//do another pass to ensure all projects are up to date
+		for (const project of projects) {
+			computeProjectNeedsUpdate(project);
+		}
+		projects = projects;
+	}
+
 	//temporarily only keep one of the projects to keep our rate limit down during testing
-	// projects = projects.filter((x) => ['brighterscript', 'roku-deploy'].includes(x.name));
+	// projects = projects.filter((x) => ['roku-deploy'].includes(x.name));
 
 	hydrateAllProjects();
 </script>
@@ -111,7 +151,7 @@
 	<div class="content">
 		<div class="cards-container">
 			{#each projects as project}
-				<div class="card {project.updateRequired ? 'update-available' : 'no-updates'}">
+				<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
 					<h2 class="project-title">
 						<span class="status-icon"></span>
 						{project.name.replace('@rokucommunity/', '')}
@@ -127,7 +167,13 @@
 							target="_blank"
 							href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
 						>
-							{project.updateRequired ? 'Start release' : 'Up to date'}
+							{#if project.isLoading !== false}
+								pending
+							{:else if project.updateRequired}
+								Start release
+							{:else}
+								Up to date
+							{/if}
 							{#if project.updateRequired}
 								<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
 									<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
@@ -195,6 +241,11 @@
 		position: relative;
 	}
 
+	.loading .release-status-button {
+		background-color: rgba(0, 0, 0, 0.24) !important;
+		color: grey !important;
+	}
+
 	.no-updates .release-status-button {
 		background-color: rgba(0, 0, 0, 0.24) !important;
 		color: green !important;
@@ -258,7 +309,8 @@
 		border-radius: 8px;
 		padding: 1rem;
 		padding-top: 1.5rem;
-		min-width: 300px;
+		/* min-width: 300px; */
+		width: 350px;
 		background-color: #1e2934;
 		word-wrap: break-word;
 	}
@@ -361,5 +413,22 @@
 
 	.no-updates .status-icon {
 		background-color: green;
+	}
+
+	.loading .status-icon {
+		background-color: grey;
+		animation: pulse-opacity 1.2s infinite;
+	}
+
+	@keyframes pulse-opacity {
+		0% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.3;
+		}
+		100% {
+			opacity: 1;
+		}
 	}
 </style>
