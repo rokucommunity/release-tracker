@@ -2,6 +2,8 @@
 	import { Octokit, App } from 'octokit';
 	import { type Project, getAllProjects } from './projects';
 
+	const enableTestMode = true;
+
 	let projects = getAllProjects();
 
 	/**
@@ -12,6 +14,17 @@
 	const octokit = new Octokit({});
 
 	async function hydrateProject(project: Project) {
+		if (enableTestMode) {
+			//temporarily generate dummy data for testing purposes instead of hitting the API
+			//generate a random semver version
+			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+			for (const dep of project.dependencies) {
+				dep.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+			}
+			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+			return;
+		}
+
 		//TODO fetch list of open PRs and add links for open release PRs
 
 		console.log(`Hydrating ${project.name}`);
@@ -49,15 +62,7 @@
 
 	async function hydrateAllProjects() {
 		for (const project of projects) {
-			//temporarily generate dummy data for testing purposes instead of hitting the API
-			//generate a random semver version
-			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
-			for (const dep of project.dependencies) {
-				dep.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
-			}
-			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
-
-			// await hydrateProject(project);
+			await hydrateProject(project);
 		}
 
 		for (const project of projects) {
