@@ -95,9 +95,9 @@
 	 */
 	async function fetchUnreleasedCommits(project: Project) {
 		//temporarily only run this for brighterscript to guard against rate limiting
-		if (project.name !== 'brighterscript-formatter') {
-			return undefined;
-		}
+		// if (project.name !== 'brighterscript-formatter') {
+		// 	return undefined;
+		// }
 		const response = await octokit.rest.repos.compareCommits({
 			owner: project.repository.owner,
 			repo: project.repository.repository,
@@ -347,6 +347,7 @@
 		color: rgb(217, 217, 217);
 		padding: 0;
 	}
+
 	.show-more:hover {
 		text-decoration: underline;
 	}
@@ -617,7 +618,7 @@
 	}
 
 	.releaseline1 .release-line {
-		background-color: #1666d6;
+		background-color: #134489;
 	}
 
 	.card.releaseline2 {
