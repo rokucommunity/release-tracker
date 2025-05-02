@@ -213,7 +213,9 @@
 					<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
 					<h2 class="project-title">
 						<span class="status-icon"></span>
-						<a target="_blank" href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/tree/{project?.releaseLine.branch}"
+						<a
+							target="_blank"
+							href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/tree/{project?.releaseLine.branch}"
 							>{project.name.replace('@rokucommunity/', '')}</a
 						>
 					</h2>
@@ -274,7 +276,10 @@
 								{@const dProject = findDependency(dependency)!}
 								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.currentVersion}
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
-									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}>
+									<a
+										target="_blank"
+										href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
+									>
 										{dependency.name}
 									</a>@{#if dependencyVersionIsDifferent}<a
 											target="_blank"
@@ -574,11 +579,11 @@
 	}
 
 	.card.releaseline3 {
-		background-color: #2e1e1e;
+		background-color: #1e2e2e;
 	}
 
 	.releaseline3 .release-line {
-		background-color: #5e2525 ;
+		background-color: #265757;
 	}
 
 	.dependencies li,
