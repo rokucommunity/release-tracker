@@ -15,9 +15,9 @@ export interface Project {
   updateRequired?: boolean;
 
   /**
-   * The main branch this project is being developed on
+   * What release line is this project associated with. Typically `master` or some synchronized alpha release like `bsc-v1`
    */
-  branch: string;
+  releaseLine: string;
 
   /**
    * The owner and repository name of the project on GitHub
@@ -32,6 +32,10 @@ export interface Project {
    */
   dependencies: Array<{
     name: string;
+    /**
+     * What release line is this dependency associated with. Typically `master` or some synchronized alpha release like `bsc-v1`
+     */
+    releaseLine: string;
     /**
      * The version of the dependency that this project last released with
      */
@@ -57,7 +61,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-deploy'
       },
-      branch: 'master',
+      releaseLine: 'master',
       dependencies: []
     },
     {
@@ -66,7 +70,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'logger'
       },
-      branch: 'master',
+      releaseLine: 'master',
       dependencies: []
     },
     {
@@ -75,7 +79,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'bslib'
       },
-      branch: 'master',
+      releaseLine: 'master',
       dependencies: []
     },
     {
@@ -84,8 +88,12 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brighterscript'
       },
-      branch: 'master',
-      dependencies: [{ name: '@rokucommunity/bslib' }, { name: '@rokucommunity/logger' }, { name: 'roku-deploy' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: '@rokucommunity/bslib', releaseLine: 'master' },
+        { name: '@rokucommunity/logger', releaseLine: 'master' },
+        { name: 'roku-deploy', releaseLine: 'master' }
+      ]
     },
     {
       name: 'roku-debug',
@@ -93,8 +101,11 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-debug'
       },
-      branch: 'master',
-      dependencies: [{ name: 'brighterscript' }, { name: '@rokucommunity/logger' }, { name: 'roku-deploy' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: 'brighterscript', releaseLine: 'master' },
+        { name: '@rokucommunity/logger', releaseLine: 'master' },
+        { name: 'roku-deploy', releaseLine: 'master' }]
     },
     {
       name: 'brighterscript-formatter',
@@ -102,8 +113,10 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brighterscript-formatter'
       },
-      branch: 'master',
-      dependencies: [{ name: 'brighterscript' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: 'brighterscript', releaseLine: 'master' }
+      ]
     },
     {
       name: '@rokucommunity/bslint',
@@ -111,8 +124,10 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'bslint'
       },
-      branch: 'master',
-      dependencies: [{ name: 'brighterscript' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: 'brighterscript', releaseLine: 'master' }
+      ]
     },
     {
       name: '@rokucommunity/brs',
@@ -120,7 +135,7 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brs'
       },
-      branch: 'master',
+      releaseLine: 'master',
       dependencies: []
     },
     {
@@ -129,8 +144,11 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'brs'
       },
-      branch: 'master',
-      dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: 'brighterscript', releaseLine: 'master' },
+        { name: 'roku-deploy', releaseLine: 'master' }
+      ]
     },
     {
       name: 'roku-report-analyzer',
@@ -138,8 +156,11 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-report-analyzer'
       },
-      branch: 'master',
-      dependencies: [{ name: '@rokucommunity/logger' }, { name: 'brighterscript' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: '@rokucommunity/logger', releaseLine: 'master' },
+        { name: 'brighterscript', releaseLine: 'master' }
+      ]
     },
     {
       name: 'vscode-brightscript-language',
@@ -147,13 +168,13 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'vscode-brightscript-language'
       },
-      branch: 'master',
+      releaseLine: 'master',
       dependencies: [
-        { name: 'roku-deploy' },
-        { name: 'roku-debug' },
-        { name: 'brighterscript' },
-        { name: 'brighterscript-formatter' },
-        { name: '@rokucommunity/logger' }
+        { name: 'roku-deploy', releaseLine: 'master' },
+        { name: 'roku-debug', releaseLine: 'master' },
+        { name: 'brighterscript', releaseLine: 'master' },
+        { name: 'brighterscript-formatter', releaseLine: 'master' },
+        { name: '@rokucommunity/logger', releaseLine: 'master' }
       ]
     },
     {
@@ -162,8 +183,10 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'roku-promise'
       },
-      branch: 'master',
-      dependencies: [{ name: 'brighterscript' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: 'brighterscript', releaseLine: 'master' }
+      ]
     },
     {
       name: '@rokucommunity/promises',
@@ -171,8 +194,11 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'promises'
       },
-      branch: 'master',
-      dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: 'brighterscript', releaseLine: 'master' },
+        { name: 'roku-deploy', releaseLine: 'master' }
+      ]
     },
     {
       name: 'rooibos-roku',
@@ -180,8 +206,11 @@ export function getAllProjects(): Project[] {
         owner: 'rokucommunity',
         repository: 'rooibos'
       },
-      branch: 'master',
-      dependencies: [{ name: 'brighterscript' }, { name: 'roku-deploy' }]
+      releaseLine: 'master',
+      dependencies: [
+        { name: 'brighterscript', releaseLine: 'master' },
+        { name: 'roku-deploy', releaseLine: 'master' }
+      ]
     }
   ];
 }

@@ -9,7 +9,7 @@
 
 	let projects = getAllProjects();
 
-	const getBranchClass = createClassFactory(['branch1', 'branch2', 'branch3', 'branch4', 'branch5', 'branch6', 'branch7']);
+	const getBranchClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
 
 	/**
 	 * When clicking on a project's "update required" button, this is the project you clicked the button for.
@@ -42,7 +42,7 @@
 
 		//fetch head package.json
 		const response = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.branch}/package.json`,
+			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine}/package.json`,
 			//prevent caching of this package.json since it could change at any time
 			cacheBusting: true
 		});
@@ -75,7 +75,7 @@
 	async function checkForUnreleasedCommits(project: Project) {
 		//fetch the latest patch file, which will tell us if the project has any unreleased commits
 		const patchResponse = await http.get({
-			url: `https://github.com/${project.repository.owner}/${project.repository.repository}/commit/${project.branch}.patch`,
+			url: `https://github.com/${project.repository.owner}/${project.repository.repository}/commit/${project.releaseLine}.patch`,
 			cacheBusting: true
 		});
 
@@ -170,7 +170,7 @@
 						? 'loading'
 						: project.updateRequired
 							? 'update-available'
-							: 'no-updates'} {getBranchClass(project.branch)}"
+							: 'no-updates'} {getBranchClass(project.releaseLine)}"
 				>
 					<h2 class="project-title">
 						<span class="status-icon"></span>
@@ -210,7 +210,7 @@
 						<p class="unreleased-commits">
 							<a
 								target="_blank"
-								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.branch}`}
+								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine}`}
 								><i>View unreleased commits</i>
 							</a>
 						</p>
@@ -219,14 +219,14 @@
 					<ul class="dependencies">
 						{#if project.dependencies.length > 0}
 							{#each project.dependencies as dependency}
-								{@const dProject = projects.find((x) => x.name === dependency.name)}
+								{@const dProject = projects.find((x) => x.name === dependency.name)!}
 								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.currentVersion}
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
 										{dependency.name}
 									</a>@{#if dependencyVersionIsDifferent}<a
 											target="_blank"
-											href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.branch}`}
+											href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.currentVersion}...${dProject.releaseLine}`}
 										>
 											{dependency?.currentVersion}⇒{dProject?.currentVersion}
 										</a>{:else}<a
@@ -240,7 +240,7 @@
 							<li><i>No dependencies</i></li>
 						{/if}
 					</ul>
-					<div class="branch-name">{project.branch}</div>
+					<div class="release-line">{project.releaseLine}</div>
 				</div>
 			{/each}
 		</div>
@@ -461,7 +461,7 @@
 		}
 	}
 
-	.branch-name {
+	.release-line {
 		position: absolute;
 		bottom: 0.5rem;
 		right: 0.5rem;
@@ -473,7 +473,7 @@
 		font-size: 0.75rem;
 	}
 
-	.branch1 .branch-name {
+	.releaseline1 .release-line {
 		background-color: #1666d6;
 	}
 
@@ -483,8 +483,7 @@
 	}
 
 	.dep-old::marker,
-	.dep-old a,
-	.dep-old .new-version {
+	.dep-old a {
 		color: #fd7e14 !important;
 	}
 </style>
