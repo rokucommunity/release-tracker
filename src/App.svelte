@@ -146,26 +146,50 @@
 		return projects.find((x) => x.name === dependency.name && x.releaseLine.name === dependency.releaseLine);
 	}
 
-	async function hydrateProjects() {
-		//TODO sort the projects so that dependency projects are always hydrated before the projects that depend on them
-		const sortedProjects = [...projects];
-		for (const project of sortedProjects) {
-			try {
-				await hydrateProject(project);
-				computeProjectNeedsUpdate(project);
-				//trigger reactivity after every project hydration
-				projects = projects;
-			} catch (e) {
-				console.error(`Error hydrating project ${project.name}:`, e);
-				project.isLoading = false;
+	/**
+	 * Refreshes the project and all of its dependencies
+	 */
+	async function refreshProject(project: Project, handledProjects: Project[] = []) {
+		//if we have already refreshed this project, don't do it again
+		if (handledProjects.includes(project)) {
+			return;
+		}
+
+		handledProjects.push(project);
+
+		project.isLoading = true;
+
+		projects = projects;
+
+		//add a small timeout to let the UI show the loading state
+		await sleep(300);
+
+		//first refresh all of the project's dependencies
+		for (const dependency of project.dependencies) {
+			const dProject = findDependency(dependency);
+
+			//if we aren't actively reloading this project, reload it now
+			if (dProject) {
+				await refreshProject(dProject, handledProjects);
 			}
 		}
+		//now refresh this project
+		await hydrateProject(project);
 
 		//do another pass to ensure all projects are up to date
 		for (const project of projects) {
 			computeProjectNeedsUpdate(project);
 		}
+
+		//trigger reactivity after every project hydration
 		projects = projects;
+	}
+
+	async function hydrateProjects() {
+		let handledProjects: Project[] = [];
+		for (const project of projects) {
+			refreshProject(project, handledProjects);
+		}
 	}
 
 	//temporarily only keep one of the projects to keep our rate limit down during testing
@@ -186,6 +210,7 @@
 							? 'update-available'
 							: 'no-updates'} {getReleaseLineClass(project.releaseLine.name)}"
 				>
+					<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
 					<h2 class="project-title">
 						<span class="status-icon"></span>
 						<a target="_blank" href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}"
@@ -279,10 +304,21 @@
 		margin: 8px;
 	}
 
+	.refresh-button {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		background-color: transparent;
+		border: none;
+		color: rgb(217, 217, 217);
+		cursor: pointer;
+		font-size: 1.25rem;
+	}
+
 	ul {
 		margin-block-start: 0;
 		margin-block-end: 0;
-        margin-left: 5px;
+		margin-left: 5px;
 	}
 
 	.navbar {
@@ -300,6 +336,10 @@
 
 	.release-status-button {
 		position: relative;
+	}
+
+	.card.loading {
+		animation: pulse-opacity 1.2s;
 	}
 
 	.loading .release-status-button {
