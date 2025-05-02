@@ -6,6 +6,8 @@
 	import { createClassFactory, sleep } from './util';
 	import { http } from './http';
 
+	const MAX_COLLAPSED_COMMITS = 4;
+
 	const enableTestMode = false;
 
 	let projects = getAllProjects().filter((x) => x.hide !== true);
@@ -146,6 +148,21 @@
 		return projects.find((x) => x.name === dependency.name && x.releaseLine.name === dependency.releaseLine);
 	}
 
+	function getFilteredProjectCommits(project: Project) {
+		const commits = project.unreleasedCommits ?? [];
+
+		if (project.showAllCommits === true) {
+			return commits;
+		} else {
+			return commits.slice(0, MAX_COLLAPSED_COMMITS);
+		}
+	}
+
+	function toggleProjectShowAllCommits(project: Project) {
+		project.showAllCommits = !project.showAllCommits;
+		projects = projects;
+	}
+
 	/**
 	 * Refreshes the project and all of its dependencies
 	 */
@@ -223,7 +240,6 @@
 						<span>
 							<i>v{project.currentVersion}</i>
 						</span>
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 						<a
 							class="button release-status-button"
 							on:click={() => toggleProjectUpdateActive(project)}
@@ -258,16 +274,28 @@
 							</a>
 						</h3>
 						<ul>
-							{#if project.unreleasedCommits?.length === 0}
+							{#if !project.unreleasedCommits}
+								<li class="faded"><i>&lt;Commits not fetched&gt;</i></li>
+							{:else if project.unreleasedCommits?.length === 0}
 								<li class="faded"><i>No unreleased commits</i></li>
 							{:else}
-								{#each project.unreleasedCommits ?? [] as commit}
+								{@const commits = getFilteredProjectCommits(project)}
+								{#each commits as commit}
 									<li>
 										<a target="_blank" href={commit.html_url} title={commit.commit.message}>
 											{commit.commit.message}
 										</a>
 									</li>
 								{/each}
+								{#if project.unreleasedCommits?.length ?? 0 > MAX_COLLAPSED_COMMITS}
+									<li>
+										<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
+											>...show {project?.showAllCommits
+												? 'less'
+												: ` ${(project.unreleasedCommits?.length ?? 0) - commits.length} more`}</button
+										>
+									</li>
+								{/if}
 							{/if}
 						</ul>
 					</div>
@@ -310,6 +338,17 @@
 <style>
 	.content {
 		margin: 8px;
+	}
+
+	.show-more {
+		background-color: transparent;
+		border: none;
+		font-style: italic;
+		color: rgb(217, 217, 217);
+		padding: 0;
+	}
+	.show-more:hover {
+		text-decoration: underline;
 	}
 
 	.refresh-button {

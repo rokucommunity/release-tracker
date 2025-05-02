@@ -58,6 +58,11 @@ export interface Project {
   isLoading?: boolean;
 
   /**
+   * Should all commits be shown in the UI for this project? Or just up to the first `MAX_COLLAPSED_COMMITS`
+   */
+  showAllCommits?: boolean;
+
+  /**
    * Does this project have any unreleased commits?
    */
   unreleasedCommits?: RestEndpointMethodTypes["repos"]["compareCommits"]["response"]['data']['commits'];
