@@ -40,7 +40,7 @@
 
 		console.log(`Hydrating ${project.name}`);
 
-		//fetch head package
+		//fetch head package.json
 		const response = await http.get({
 			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.branch}/package.json`,
 			//prevent caching of this package.json since it could change at any time
@@ -57,6 +57,8 @@
 		});
 		const tagPackageLockJson = JSON.parse(tagResponse);
 
+		// project.hasUnreleasedCommits = await checkForUnreleasedCommits(project);
+
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
 			dependency.currentVersion ??= tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
@@ -65,6 +67,31 @@
 		//fetch the latest patch file
 
 		project.isLoading = false;
+	}
+
+	/**
+	 * Does this project have any unreleased commits? Returns `true` unless we can specifically determine that there are none
+	 */
+	async function checkForUnreleasedCommits(project: Project) {
+		//fetch the latest patch file, which will tell us if the project has any unreleased commits
+		const patchResponse = await http.get({
+			url: `https://github.com/${project.repository.owner}/${project.repository.repository}/commit/${project.branch}.patch`,
+			cacheBusting: true
+		});
+
+		const match = /^Subject\s*\[PATCH\s+\d+\/\d+\]\s*Increment version to (.+)$/.exec(patchResponse);
+		if (match) {
+			const version = match[1].trim();
+			//if the version matche the project's current version, there are no unreleased commits
+			if (version === project.currentVersion) {
+				return false;
+			}
+			//if the version is not a valid semver, we assume there are unreleased commits
+			return true;
+		}
+
+		//unless we can find a version number in the patch file, we assume there are unreleased commits
+		return true;
 	}
 
 	function computeProjectNeedsUpdate(project: Project) {
@@ -108,10 +135,15 @@
 			return 0;
 		});
 		for (const project of sortedProjects) {
-			await hydrateProject(project);
-			computeProjectNeedsUpdate(project);
-			//trigger reactivity after every project hydration
-			projects = projects;
+			try {
+				await hydrateProject(project);
+				computeProjectNeedsUpdate(project);
+				//trigger reactivity after every project hydration
+				projects = projects;
+			} catch (e) {
+				console.error(`Error hydrating project ${project.name}:`, e);
+				project.isLoading = false;
+			}
 		}
 
 		//do another pass to ensure all projects are up to date
@@ -122,8 +154,7 @@
 	}
 
 	//temporarily only keep one of the projects to keep our rate limit down during testing
-	// projects = projects.filter((x) => ['roku-deploy'].includes(x.name));
-
+	// projects = [projects.find((x) => x.name === 'brighterscript')!];
 	hydrateAllProjects();
 </script>
 
@@ -143,7 +174,9 @@
 				>
 					<h2 class="project-title">
 						<span class="status-icon"></span>
-						{project.name.replace('@rokucommunity/', '')}
+						<a target="_blank" href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}"
+							>{project.name.replace('@rokucommunity/', '')}</a
+						>
 					</h2>
 					<div class="version-row">
 						<span>
@@ -173,6 +206,15 @@
 							{/if}
 						</a>
 					</div>
+					{#if project.hasUnreleasedCommits !== false}
+						<p class="unreleased-commits">
+							<a
+								target="_blank"
+								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.branch}`}
+								><i>View unreleased commits</i>
+							</a>
+						</p>
+					{/if}
 					<h3>Dependencies:</h3>
 					<ul class="dependencies">
 						{#if project.dependencies.length > 0}
@@ -182,21 +224,16 @@
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
 										{dependency.name}
-									</a>@<a
-										target="_blank"
-										href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dependency?.currentVersion}`}
-									>
-										{dependency?.currentVersion}
-									</a>
-									{#if dependencyVersionIsDifferent}
-										<span class="arrow">⇒</span>
-										<a
+									</a>@{#if dependencyVersionIsDifferent}<a
 											target="_blank"
-											class="new-version"
+											href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.branch}`}
+										>
+											{dependency?.currentVersion}⇒{dProject?.currentVersion}
+										</a>{:else}<a
+											target="_blank"
 											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
-											>{dProject?.currentVersion}
-										</a>
-									{/if}
+											>{dProject?.currentVersion}</a
+										>{/if}
 								</li>
 							{/each}
 						{:else}

@@ -42,6 +42,11 @@ export interface Project {
    * Is the project currently having its data fetched?
    */
   isLoading?: boolean;
+
+  /**
+   * Does this project have any unreleased commits?
+   */
+  hasUnreleasedCommits?: boolean;
 }
 
 export function getAllProjects(): Project[] {

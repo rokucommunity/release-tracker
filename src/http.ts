@@ -1,4 +1,5 @@
 import * as localforage from 'localforage';
+import { sleep } from './util';
 
 export class Http {
     /**
@@ -27,27 +28,44 @@ export class Http {
             }
         }
 
-        const response = await fetch(options.url, {
-            method: options.method,
-        });
+        try {
+            const response = await fetch(options.url, {
+                ...options,
+                method: options.method,
+            });
 
-        if (response.ok) {
-            const text = await response.text();
-            if (options.cacheInLocalStorage) {
-                await localforage.setItem(`http-request: ${options.url}`, text);
+            if (response.ok) {
+                const text = await response.text();
+                if (options.cacheInLocalStorage) {
+                    await localforage.setItem(`http-request: ${options.url}`, text);
+                }
+                return text;
+            } else {
+                throw new Error(`HTTP error! status: ${response.status}`, { cause: response });
             }
-            return text;
-        } else {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        } catch (e) {
+            if (options.retryCount ?? 0 > 0) {
+                const delay = Math.random() * 100;
+                console.warn('Request failed, will retry in ${delay}ms', e);
+                //small timeout then try again
+                await sleep(delay);
+                return this.request({
+                    ...options,
+                    retryCount: (options.retryCount ?? 0) - 1
+                });
+            } else {
+                throw e;
+            }
         }
     }
 }
 
-export interface RequestOptions {
+export interface RequestOptions extends RequestInit {
     url: string;
     method?: 'GET';
     cacheBusting?: true;
     cacheInLocalStorage?: boolean;
+    retryCount?: number;
 }
 
 export const http = new Http();
