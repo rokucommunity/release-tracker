@@ -76,7 +76,7 @@
 		});
 		const tagPackageLockJson = JSON.parse(tagResponse);
 
-		project.unreleasedCommits = (await fetchUnreleasedCommits(project)) as any;
+		project.unreleasedCommits = await fetchUnreleasedCommits(project);
 
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
@@ -94,7 +94,7 @@
 	async function fetchUnreleasedCommits(project: Project) {
 		//temporarily only run this for brighterscript to guard against rate limiting
 		if (project.name !== 'brighterscript') {
-			return false;
+			return [];
 		}
 		const response = await octokit.rest.repos.compareCommits({
 			owner: project.repository.owner,
@@ -225,10 +225,22 @@
 							<a
 								target="_blank"
 								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
-								>Unreleased commits:</a
-							>
+								>Unreleased commits ({project.unreleasedCommits?.length}):
+							</a>
 						</h3>
-						{#each project.unreleasedCommits ?? [] as commit}{/each}
+						<ul>
+							{#if project.unreleasedCommits?.length === 0}
+								<li class="faded"><i>No unreleased commits</i></li>
+							{:else}
+								{#each project.unreleasedCommits ?? [] as commit}
+									<li>
+										<a target="_blank" href={commit.html_url}>
+											{commit.commit.message}
+										</a>
+									</li>
+								{/each}
+							{/if}
+						</ul>
 					</div>
 					<h3>Dependencies:</h3>
 					<ul class="dependencies">
@@ -252,7 +264,7 @@
 								</li>
 							{/each}
 						{:else}
-							<li><i>No dependencies</i></li>
+							<li class="faded"><i>No dependencies</i></li>
 						{/if}
 					</ul>
 					<div class="release-line">{project.releaseLine.name}</div>
@@ -266,6 +278,13 @@
 	.content {
 		margin: 8px;
 	}
+
+	ul {
+		margin-block-start: 0;
+		margin-block-end: 0;
+        margin-left: 5px;
+	}
+
 	.navbar {
 		background-color: rgba(0, 0, 0, 0);
 		color: rgb(217, 217, 217);
@@ -515,7 +534,8 @@
 	}
 
 	.dependencies li,
-	.dependencies li a {
+	.dependencies li a,
+	.faded {
 		color: rgb(168, 168, 168);
 	}
 

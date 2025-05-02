@@ -60,7 +60,7 @@ export interface Project {
   /**
    * Does this project have any unreleased commits?
    */
-  unreleasedCommits?: Array<RestEndpointMethodTypes["repos"]["compareCommits"]["response"]>
+  unreleasedCommits?: RestEndpointMethodTypes["repos"]["compareCommits"]["response"]['data']['commits'];
 }
 
 export function getAllProjects(): Project[] {
