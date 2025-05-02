@@ -93,7 +93,7 @@
 	 */
 	async function fetchUnreleasedCommits(project: Project) {
 		//temporarily only run this for brighterscript to guard against rate limiting
-		if (project.name !== 'brighterscript') {
+		if (project.name !== 'brighterscript-formatter') {
 			return undefined;
 		}
 		const response = await octokit.rest.repos.compareCommits({
@@ -247,7 +247,9 @@
 							{/if}
 						</a>
 					</div>
-					<div>
+
+					<!-- unreleased commits-->
+					<div class="unreleased-commits">
 						<h3>
 							<a
 								target="_blank"
@@ -261,7 +263,7 @@
 							{:else}
 								{#each project.unreleasedCommits ?? [] as commit}
 									<li>
-										<a target="_blank" href={commit.html_url}>
+										<a target="_blank" href={commit.html_url} title={commit.commit.message}>
 											{commit.commit.message}
 										</a>
 									</li>
@@ -269,6 +271,7 @@
 							{/if}
 						</ul>
 					</div>
+
 					<h3>Dependencies:</h3>
 					<ul class="dependencies">
 						{#if project.dependencies.length > 0}
@@ -324,6 +327,14 @@
 		margin-block-start: 0;
 		margin-block-end: 0;
 		margin-left: 5px;
+	}
+
+	.unreleased-commits li a {
+		max-width: 290px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		display: inline-block;
 	}
 
 	.navbar {
