@@ -270,7 +270,7 @@
 							<a
 								target="_blank"
 								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
-								>Unreleased commits ({project.unreleasedCommits ? project.unreleasedCommits?.length : 'N/A'}):
+								>Code changes:
 							</a>
 						</h3>
 						<ul>
@@ -282,7 +282,7 @@
 								{@const commits = getFilteredProjectCommits(project)}
 								{#each commits as commit}
 									<li>
-										<a target="_blank" href={commit.html_url} title={commit.commit.message}>
+										<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
 											{commit.commit.message}
 										</a>
 									</li>
@@ -290,9 +290,7 @@
 								{#if project.unreleasedCommits?.length ?? 0 > MAX_COLLAPSED_COMMITS}
 									<li>
 										<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
-											>...show {project?.showAllCommits
-												? 'less'
-												: ` ${(project.unreleasedCommits?.length ?? 0) - commits.length} more`}</button
+											>...show {project?.showAllCommits ? 'less' : `more`}</button
 										>
 									</li>
 								{/if}
@@ -366,15 +364,16 @@
 	ul {
 		margin-block-start: 0;
 		margin-block-end: 0;
-		margin-left: 5px;
+		margin-left: 13px;
 	}
 
-	.unreleased-commits li a {
+	.commit-link {
 		max-width: 290px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		display: inline-block;
+		vertical-align: middle;
 	}
 
 	.navbar {
