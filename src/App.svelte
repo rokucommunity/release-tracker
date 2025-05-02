@@ -94,7 +94,7 @@
 	async function fetchUnreleasedCommits(project: Project) {
 		//temporarily only run this for brighterscript to guard against rate limiting
 		if (project.name !== 'brighterscript') {
-			return [];
+			return undefined;
 		}
 		const response = await octokit.rest.repos.compareCommits({
 			owner: project.repository.owner,
@@ -213,7 +213,7 @@
 					<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
 					<h2 class="project-title">
 						<span class="status-icon"></span>
-						<a target="_blank" href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}"
+						<a target="_blank" href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/tree/{project?.releaseLine.branch}"
 							>{project.name.replace('@rokucommunity/', '')}</a
 						>
 					</h2>
@@ -250,7 +250,7 @@
 							<a
 								target="_blank"
 								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
-								>Unreleased commits ({project.unreleasedCommits?.length}):
+								>Unreleased commits ({project.unreleasedCommits ? project.unreleasedCommits?.length : 'N/A'}):
 							</a>
 						</h3>
 						<ul>
@@ -274,7 +274,7 @@
 								{@const dProject = findDependency(dependency)!}
 								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.currentVersion}
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
-									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
+									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}>
 										{dependency.name}
 									</a>@{#if dependencyVersionIsDifferent}<a
 											target="_blank"
@@ -561,16 +561,24 @@
 		background-color: #1e2534;
 	}
 
-	.card.releaseline2 {
-		background-color: #271d2e;
-	}
-
 	.releaseline1 .release-line {
 		background-color: #1666d6;
 	}
 
+	.card.releaseline2 {
+		background-color: #271d2e;
+	}
+
 	.releaseline2 .release-line {
 		background-color: #57227d;
+	}
+
+	.card.releaseline3 {
+		background-color: #2e1e1e;
+	}
+
+	.releaseline3 .release-line {
+		background-color: #5e2525 ;
 	}
 
 	.dependencies li,
