@@ -18,6 +18,8 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
+    "@octokit/plugin-throttling": "^10.0.0",
+    "@octokit/rest": "^21.1.1",
     "localforage": "^1.10.0",
     "octokit": "^4.1.3"
   }

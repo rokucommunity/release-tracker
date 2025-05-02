@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Octokit, App } from 'octokit';
+	import { Octokit } from '@octokit/rest';
+	import { throttling } from '@octokit/plugin-throttling';
 	import { type Project, getAllProjects } from './projects';
 	import { hasContext } from 'svelte';
 	import { createClassFactory, sleep } from './util';
@@ -9,14 +10,32 @@
 
 	let projects = getAllProjects();
 
-	const getBranchClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
+	const getReleaseLineClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
 
 	/**
 	 * When clicking on a project's "update required" button, this is the project you clicked the button for.
 	 */
 	let selectedProjectForUpdate: Project | undefined;
 
-	const octokit = new Octokit();
+	const MyOctokit = Octokit.plugin(throttling);
+	const octokit = new MyOctokit({
+		// auth: 'token ' + process.env.TOKEN,
+		throttle: {
+			onRateLimit: (retryAfter, options) => {
+				octokit.log.warn(`Request quota exhausted for request ${options.method} ${options.url}`);
+
+				// Retry twice after hitting a rate limit error, then give up
+				if (options.request.retryCount <= 3) {
+					console.log(`Retrying after ${retryAfter} seconds!`);
+					return true;
+				}
+			},
+			onSecondaryRateLimit: (retryAfter, options, octokit) => {
+				// does not retry, only logs a warning
+				octokit.log.warn(`Secondary quota detected for request ${options.method} ${options.url}`);
+			}
+		}
+	});
 
 	async function hydrateProject(project: Project) {
 		project.isLoading = true;
@@ -42,7 +61,7 @@
 
 		//fetch head package.json
 		const response = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine}/package.json`,
+			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine.branch}/package.json`,
 			//prevent caching of this package.json since it could change at any time
 			cacheBusting: true
 		});
@@ -57,7 +76,7 @@
 		});
 		const tagPackageLockJson = JSON.parse(tagResponse);
 
-		// project.hasUnreleasedCommits = await checkForUnreleasedCommits(project);
+		project.unreleasedCommits = (await fetchUnreleasedCommits(project)) as any;
 
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
@@ -72,34 +91,37 @@
 	/**
 	 * Does this project have any unreleased commits? Returns `true` unless we can specifically determine that there are none
 	 */
-	async function checkForUnreleasedCommits(project: Project) {
-		//fetch the latest patch file, which will tell us if the project has any unreleased commits
-		const patchResponse = await http.get({
-			url: `https://github.com/${project.repository.owner}/${project.repository.repository}/commit/${project.releaseLine}.patch`,
-			cacheBusting: true
-		});
-
-		const match = /^Subject\s*\[PATCH\s+\d+\/\d+\]\s*Increment version to (.+)$/.exec(patchResponse);
-		if (match) {
-			const version = match[1].trim();
-			//if the version matche the project's current version, there are no unreleased commits
-			if (version === project.currentVersion) {
-				return false;
-			}
-			//if the version is not a valid semver, we assume there are unreleased commits
-			return true;
+	async function fetchUnreleasedCommits(project: Project) {
+		//temporarily only run this for brighterscript to guard against rate limiting
+		if (project.name !== 'brighterscript') {
+			return false;
 		}
+		const response = await octokit.rest.repos.compareCommits({
+			owner: project.repository.owner,
+			repo: project.repository.repository,
+			base: `v${project.currentVersion}`, // The tag to compare from
+			head: project.releaseLine.branch // The branch or commit to compare to
+		});
+		debugger;
 
-		//unless we can find a version number in the patch file, we assume there are unreleased commits
-		return true;
+		const commits = response.data.commits; // Array of commits after the tag
+		if (commits.length > 0) {
+			console.log(`${project.name}: Found ${commits.length} commits after tag v${project.currentVersion}`);
+			return commits; // There are unreleased commits
+		} else {
+			console.log(`${project.name}: No commits found after tag v${project.currentVersion}`);
+			return []; // No unreleased commits
+		}
 	}
 
 	function computeProjectNeedsUpdate(project: Project) {
 		// Compute whether an update is required
-		project.updateRequired = !project.dependencies.every((dep) => {
+		const hasOutdatedDependencies = !project.dependencies.every((dep) => {
 			const dProject = projects.find((x) => x.name === dep.name);
 			return !dProject?.currentVersion || dProject.currentVersion === dep.currentVersion;
 		});
+		//projects who don't yet have their commits fetched will always be marked as needing an update
+		project.updateRequired = hasOutdatedDependencies || !project.unreleasedCommits || project.unreleasedCommits.length > 0;
 	}
 
 	function dispatchRelease(project: Project) {
@@ -121,19 +143,13 @@
 		}
 	}
 
-	async function hydrateAllProjects() {
-		//sort the projects so that dependency projects are always hydrated before the projects that depend on them
-		const sortedProjects = [...projects].sort((a, b) => {
-			const aDependencies = a.dependencies.map((x) => x.name);
-			const bDependencies = b.dependencies.map((x) => x.name);
-			if (aDependencies.includes(b.name)) {
-				return 1;
-			}
-			if (bDependencies.includes(a.name)) {
-				return -1;
-			}
-			return 0;
-		});
+	function findDependency(dependency: { name: string; releaseLine: { name: string; branch: string } }) {
+		return projects.find((x) => x.name === dependency.name && x.releaseLine.branch === dependency.releaseLine.branch);
+	}
+
+	async function hydrateProjects() {
+		//TODO sort the projects so that dependency projects are always hydrated before the projects that depend on them
+		const sortedProjects = [...projects];
 		for (const project of sortedProjects) {
 			try {
 				await hydrateProject(project);
@@ -154,8 +170,7 @@
 	}
 
 	//temporarily only keep one of the projects to keep our rate limit down during testing
-	// projects = [projects.find((x) => x.name === 'brighterscript')!];
-	hydrateAllProjects();
+	hydrateProjects();
 </script>
 
 <main>
@@ -170,7 +185,7 @@
 						? 'loading'
 						: project.updateRequired
 							? 'update-available'
-							: 'no-updates'} {getBranchClass(project.releaseLine)}"
+							: 'no-updates'} {getReleaseLineClass(project.releaseLine.name)}"
 				>
 					<h2 class="project-title">
 						<span class="status-icon"></span>
@@ -206,29 +221,30 @@
 							{/if}
 						</a>
 					</div>
-					{#if project.hasUnreleasedCommits !== false}
-						<p class="unreleased-commits">
+					<div>
+						<h3>
 							<a
 								target="_blank"
-								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine}`}
-								><i>View unreleased commits</i>
-							</a>
-						</p>
-					{/if}
+								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
+								>Unreleased commits:</a
+							>
+						</h3>
+						{#each project.unreleasedCommits ?? [] as commit}{/each}
+					</div>
 					<h3>Dependencies:</h3>
 					<ul class="dependencies">
 						{#if project.dependencies.length > 0}
 							{#each project.dependencies as dependency}
-								{@const dProject = projects.find((x) => x.name === dependency.name)!}
+								{@const dProject = findDependency(dependency)!}
 								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.currentVersion}
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
 										{dependency.name}
 									</a>@{#if dependencyVersionIsDifferent}<a
 											target="_blank"
-											href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.currentVersion}...${dProject.releaseLine}`}
+											href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.currentVersion}...${dProject.releaseLine.branch}`}
 										>
-											{dependency?.currentVersion}⇒{dProject?.currentVersion}
+											{dependency?.currentVersion}&nbsp;⇒&nbsp;{dProject?.currentVersion}
 										</a>{:else}<a
 											target="_blank"
 											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
@@ -240,7 +256,7 @@
 							<li><i>No dependencies</i></li>
 						{/if}
 					</ul>
-					<div class="release-line">{project.releaseLine}</div>
+					<div class="release-line">{project.releaseLine.name}</div>
 				</div>
 			{/each}
 		</div>
@@ -251,7 +267,6 @@
 	.content {
 		margin: 8px;
 	}
-	/* Navbar Styles */
 	.navbar {
 		background-color: rgba(0, 0, 0, 0);
 		color: rgb(217, 217, 217);
@@ -317,6 +332,10 @@
 		font-size: 1.5rem;
 	}
 
+	a:hover {
+		text-decoration: underline;
+	}
+
 	a,
 	a:visited {
 		color: rgb(158, 158, 255);
@@ -349,9 +368,14 @@
 		padding: 0;
 	}
 
+	.card a {
+		color: rgb(217, 217, 217);
+	}
+
 	.card h3 {
 		margin: 1rem 0 0.5rem;
 		font-size: 1rem;
+		color: rgb(217, 217, 217);
 	}
 
 	.card ul {
@@ -475,6 +499,10 @@
 
 	.releaseline1 .release-line {
 		background-color: #1666d6;
+	}
+
+	.releaseline2 .release-line {
+		background-color: #dc3545;
 	}
 
 	.dependencies li,
