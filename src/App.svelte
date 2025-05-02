@@ -57,7 +57,7 @@
 
 		//TODO fetch list of open PRs and add links for open release PRs
 
-		console.log(`Hydrating ${project.name}`);
+		console.log(`${project.name} (${project.releaseLine.branch}): hydrating project`);
 
 		//fetch head package.json
 		const response = await http.get({
@@ -105,10 +105,10 @@
 
 		const commits = response.data.commits; // Array of commits after the tag
 		if (commits.length > 0) {
-			console.log(`${project.name}: Found ${commits.length} commits after tag v${project.currentVersion}`);
+			console.log(`${project.name} (${project.releaseLine.branch}): Found ${commits.length} commits after tag v${project.currentVersion}`);
 			return commits; // There are unreleased commits
 		} else {
-			console.log(`${project.name}: No commits found after tag v${project.currentVersion}`);
+			console.log(`${project.name} (${project.releaseLine.branch}): No commits found after tag v${project.currentVersion}`);
 			return []; // No unreleased commits
 		}
 	}
