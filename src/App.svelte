@@ -485,6 +485,14 @@
 		}
 	}
 
+    .card.releaseline1 {
+		background-color: #1e2534;
+    }
+
+    .card.releaseline2 {
+		background-color: #163025;
+    }
+
 	.release-line {
 		position: absolute;
 		bottom: 0.5rem;
@@ -495,10 +503,11 @@
 		padding-left: 5px;
 		padding-right: 5px;
 		font-size: 0.75rem;
+        font-weight: bold;
 	}
 
 	.releaseline1 .release-line {
-		background-color: #1666d6;
+        background-color: #1666d6;
 	}
 
 	.releaseline2 .release-line {
