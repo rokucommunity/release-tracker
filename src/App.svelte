@@ -39,14 +39,17 @@
 		//TODO fetch list of open PRs and add links for open release PRs
 
 		console.log(`Hydrating ${project.name}`);
+
+		//fetch head package
 		const response = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/master/package.json`,
+			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.branch}/package.json`,
 			//prevent caching of this package.json since it could change at any time
 			cacheBusting: true
 		});
 		const packageJson = JSON.parse(response);
 		project.currentVersion = packageJson.version;
 
+		//fetch most recent release package-lock.json
 		const tagResponse = await http.get({
 			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/tags/v${packageJson.version}/package-lock.json`,
 			//this request can be cached since files from tag refs should never change
@@ -171,12 +174,12 @@
 						</a>
 					</div>
 					<h3>Dependencies:</h3>
-					<ul>
+					<ul class="dependencies">
 						{#if project.dependencies.length > 0}
 							{#each project.dependencies as dependency}
 								{@const dProject = projects.find((x) => x.name === dependency.name)}
 								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.currentVersion}
-								<li>
+								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 									<a target="_blank" href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}`}>
 										{dependency.name}
 									</a>@<a
@@ -186,9 +189,10 @@
 										{dependency?.currentVersion}
 									</a>
 									{#if dependencyVersionIsDifferent}
-										⇒
+										<span class="arrow">⇒</span>
 										<a
 											target="_blank"
+											class="new-version"
 											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
 											>{dProject?.currentVersion}
 										</a>
@@ -196,7 +200,7 @@
 								</li>
 							{/each}
 						{:else}
-							<li><i style="color: grey">No dependencies</i></li>
+							<li><i>No dependencies</i></li>
 						{/if}
 					</ul>
 					<div class="branch-name">{project.branch}</div>
@@ -429,10 +433,21 @@
 		padding-bottom: 2px;
 		padding-left: 5px;
 		padding-right: 5px;
-		font-size: .75rem;
+		font-size: 0.75rem;
 	}
 
 	.branch1 .branch-name {
 		background-color: #1666d6;
+	}
+
+	.dependencies li,
+	.dependencies li a {
+		color: rgb(168, 168, 168);
+	}
+
+	.dep-old::marker,
+	.dep-old a,
+	.dep-old .new-version {
+		color: #fd7e14 !important;
 	}
 </style>
