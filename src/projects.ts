@@ -7,6 +7,11 @@ export interface Project {
   name: string;
 
   /**
+   * Should the project be hidden from the UI?
+   */
+  hide?: boolean;
+
+  /**
    * The current version of the project (as of the master branch latest package.json)
    */
   currentVersion?: string;
@@ -40,10 +45,7 @@ export interface Project {
     /**
      * What release line is this dependency associated with. Typically `master` or some synchronized alpha release like `bsc-v1`
      */
-    releaseLine: {
-      name: string;
-      branch: string;
-    };
+    releaseLine: string;
     /**
      * The version of the dependency that this project last released with
      */
@@ -112,24 +114,15 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: '@rokucommunity/bslib',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: '@rokucommunity/logger',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'roku-deploy',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -146,11 +139,9 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          }
-        }]
+          releaseLine: 'master'
+        }
+      ]
     },
     {
       name: 'brighterscript-formatter',
@@ -165,10 +156,7 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -185,10 +173,7 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -217,17 +202,11 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'roku-deploy',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -244,17 +223,11 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: '@rokucommunity/logger',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -271,38 +244,23 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'roku-deploy',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'roku-debug',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'brighterscript-formatter',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: '@rokucommunity/logger',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -319,10 +277,7 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -339,17 +294,11 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'roku-deploy',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         }
       ]
     },
@@ -366,17 +315,46 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'roku-deploy',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
+        }
+      ]
+    },
+    {
+      name: 'bsc-plugin-auto-findnode',
+      repository: {
+        owner: 'rokucommunity',
+        repository: 'bsc-plugin-auto-findnode'
+      },
+      releaseLine: {
+        name: 'master',
+        branch: 'master',
+      },
+      dependencies: [
+        {
+          name: 'brighterscript',
+          releaseLine: 'master'
+        }
+      ]
+    },
+    {
+      name: 'bsc-plugin-inline-annotation',
+      hide: true,
+      repository: {
+        owner: 'rokucommunity',
+        repository: 'bsc-plugin-inline-annotation'
+      },
+      releaseLine: {
+        name: 'master',
+        branch: 'master',
+      },
+      dependencies: [
+        {
+          name: 'brighterscript',
+          releaseLine: 'master'
         }
       ]
     },
@@ -393,24 +371,32 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: '@rokucommunity/bslib',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: '@rokucommunity/logger',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
         },
         {
           name: 'roku-deploy',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          },
+          releaseLine: 'master'
+        }
+      ]
+    },
+    {
+      name: 'bsc-plugin-auto-findnode',
+      repository: {
+        owner: 'rokucommunity',
+        repository: 'bsc-plugin-auto-findnode'
+      },
+      releaseLine: {
+        name: 'bsc-v1',
+        branch: 'v1',
+      },
+      dependencies: [
+        {
+          name: 'brighterscript',
+          releaseLine: 'bsc-v1'
         }
       ]
     },
@@ -427,17 +413,11 @@ export function getAllProjects(): Project[] {
       dependencies: [
         {
           name: 'brighterscript',
-          releaseLine: {
-            name: 'bsc-v1',
-            branch: 'v1'
-          }
+          releaseLine: 'bsc-v1'
         },
         {
           name: 'roku-deploy',
-          releaseLine: {
-            name: 'master',
-            branch: 'master',
-          }
+          releaseLine: 'master'
         }
       ]
     }

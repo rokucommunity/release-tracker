@@ -8,7 +8,7 @@
 
 	const enableTestMode = false;
 
-	let projects = getAllProjects();
+	let projects = getAllProjects().filter((x) => x.hide !== true);
 
 	const getReleaseLineClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
 
@@ -102,7 +102,6 @@
 			base: `v${project.currentVersion}`, // The tag to compare from
 			head: project.releaseLine.branch // The branch or commit to compare to
 		});
-		debugger;
 
 		const commits = response.data.commits; // Array of commits after the tag
 		if (commits.length > 0) {
@@ -143,8 +142,8 @@
 		}
 	}
 
-	function findDependency(dependency: { name: string; releaseLine: { name: string; branch: string } }) {
-		return projects.find((x) => x.name === dependency.name && x.releaseLine.branch === dependency.releaseLine.branch);
+	function findDependency(dependency: { name: string; releaseLine: string }) {
+		return projects.find((x) => x.name === dependency.name && x.releaseLine.name === dependency.releaseLine);
 	}
 
 	async function hydrateProjects() {
@@ -352,13 +351,14 @@
 
 	.card {
 		box-sizing: border-box;
-		border: 2px solid grey;
+		border: 2px solid rgba(255, 255, 255, 0.15);
+		border-style: inset;
 		border-radius: 8px;
 		padding: 1rem;
 		padding-top: 1.5rem;
+		border-style: inset;
 		/* min-width: 300px; */
 		width: 350px;
-		background-color: #1e2934;
 		word-wrap: break-word;
 		position: relative;
 	}
@@ -485,14 +485,6 @@
 		}
 	}
 
-    .card.releaseline1 {
-		background-color: #1e2534;
-    }
-
-    .card.releaseline2 {
-		background-color: #163025;
-    }
-
 	.release-line {
 		position: absolute;
 		bottom: 0.5rem;
@@ -503,15 +495,23 @@
 		padding-left: 5px;
 		padding-right: 5px;
 		font-size: 0.75rem;
-        font-weight: bold;
+		font-weight: bold;
+	}
+
+	.card.releaseline1 {
+		background-color: #1e2534;
+	}
+
+	.card.releaseline2 {
+		background-color: #271d2e;
 	}
 
 	.releaseline1 .release-line {
-        background-color: #1666d6;
+		background-color: #1666d6;
 	}
 
 	.releaseline2 .release-line {
-		background-color: #dc3545;
+		background-color: #57227d;
 	}
 
 	.dependencies li,
