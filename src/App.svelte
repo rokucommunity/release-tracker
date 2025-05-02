@@ -216,8 +216,8 @@
 	}
 	/* Navbar Styles */
 	.navbar {
-		background-color: rgb(88, 27, 152);
-		color: white;
+		background-color: rgba(0, 0, 0, 0);
+		color: rgb(217, 217, 217);
 		padding: 1rem;
 		display: flex;
 		justify-content: space-between;
