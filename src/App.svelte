@@ -242,6 +242,9 @@
 <main>
 	<header class="navbar">
 		<h1>RokuCommunity Release Tracker</h1>
+		<a href="https://github.com/rokucommunity/release-tracker" title="View this project on GitHub" target="_blank">
+			<img src="github-mark-white.png" alt="GitHub" width="30" height="30" />
+		</a>
 	</header>
 	<div class="content">
 		{#each releaseLines as releaseLine}
