@@ -2,14 +2,13 @@
 	import { Octokit } from '@octokit/rest';
 	import { throttling } from '@octokit/plugin-throttling';
 	import { type Project, getAllProjects } from './projects';
-	import { hasContext } from 'svelte';
 	import { createClassFactory, sleep } from './util';
 	import { http } from './http';
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
 	const enableTestMode = false;
-	const commitsDebugFilter = false ? ['brighterscript-formatter'] : [];
+	const commitsDebugFilter = false ? ['@rokucommunity/logger'] : [];
 
 	let projects = getAllProjects().filter((x) => x.hide !== true);
 
@@ -87,6 +86,8 @@
 		//fetch most recent release package-lock.json
 		const tagResponse = await http.get({
 			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/tags/v${packageLockJson.version}/package-lock.json`,
+			//prevent caching of this package.json since it could change at any time
+			cacheBusting: true,
 			//this request can be cached since files from tag refs should never change
 			cacheInLocalStorage: true
 		});
@@ -264,7 +265,7 @@
 							</h2>
 							<div class="version-row">
 								<span>
-									<i>v{project.currentVersion}</i>
+									<a target="_blank" href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/releases/tag/v{project.currentVersion}"><i>v{project.currentVersion}</i></a>
 								</span>
 								<a
 									class="button release-status-button"

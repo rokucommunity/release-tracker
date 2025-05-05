@@ -15,17 +15,17 @@ export class Http {
     }
 
     public async request(options: RequestOptions): Promise<string> {
-        if (options.cacheBusting) {
-            const url = new URL(options.url);
-            url.searchParams.set('nocache', Date.now().toString());
-            options.url = url.toString();
-        }
-
         if (options.cacheInLocalStorage) {
             const cached = await localforage.getItem<string>(`http-request: ${options.url}`);
             if (cached) {
                 return cached;
             }
+        }
+
+        if (options.cacheBusting) {
+            const url = new URL(options.url);
+            url.searchParams.set('nocache', Date.now().toString());
+            options.url = url.toString();
         }
 
         try {
