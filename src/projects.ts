@@ -147,7 +147,15 @@ export function getAllProjects(): Project[] {
       },
       dependencies: [
         {
+          name: '@rokucommunity/logger',
+          releaseLine: 'mainline'
+        },
+        {
           name: 'brighterscript',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'roku-deploy',
           releaseLine: 'mainline'
         }
       ]
