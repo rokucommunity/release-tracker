@@ -103,6 +103,7 @@
 		if (commitsDebugFilter.length > 0 && !commitsDebugFilter.includes(project.name)) {
 			return undefined;
 		}
+		try {
 		const response = await octokit.rest.repos.compareCommits({
 			owner: project.repository.owner,
 			repo: project.repository.repository,
@@ -112,11 +113,17 @@
 
 		const commits = response.data.commits; // Array of commits after the tag
 		if (commits.length > 0) {
-			console.log(`${project.name} (${project.releaseLine.branch}): Found ${commits.length} commits after tag v${project.currentVersion}`);
+				console.log(
+					`${project.name} (${project.releaseLine.branch}): Found ${commits.length} commits after tag v${project.currentVersion}`
+				);
 			return commits; // There are unreleased commits
 		} else {
 			console.log(`${project.name} (${project.releaseLine.branch}): No commits found after tag v${project.currentVersion}`);
 			return []; // No unreleased commits
+			}
+		} catch (e) {
+			console.error(e);
+			return undefined; // Error occurred while fetching commits, return undefined so we don't completely fail the hydration
 		}
 	}
 
@@ -280,7 +287,7 @@
 						</h3>
 						<ul>
 							{#if !project.unreleasedCommits}
-								<li class="faded"><i>&lt;Commits not fetched&gt;</i></li>
+								<li class="commits-not-fetched"><i>&lt;Commits not fetched&gt;</i></li>
 							{:else if project.unreleasedCommits?.length === 0}
 								<li class="faded"><i>No unreleased commits</i></li>
 							{:else}
@@ -367,8 +374,8 @@
 
 	.refresh-button {
 		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
+		top: 0.1rem;
+		right: 0.1rem;
 		background-color: transparent;
 		border: none;
 		color: rgb(217, 217, 217);
@@ -682,5 +689,9 @@
 	}
 	.dependency-end-version {
 		white-space: nowrap;
+	}
+
+	.commits-not-fetched {
+		color: #dc3545;
 	}
 </style>
