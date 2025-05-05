@@ -9,7 +9,7 @@
 	const MAX_COLLAPSED_COMMITS = 4;
 
 	const enableTestMode = false;
-	const commitsDebugFilter = enableTestMode ? ['brighterscript-formatter'] : [];
+	const commitsDebugFilter = false ? ['brighterscript-formatter'] : [];
 
 	let projects = getAllProjects().filter((x) => x.hide !== true);
 
@@ -303,6 +303,7 @@
 						</ul>
 					</div>
 
+					<!-- dependencies list -->
 					<h3>Dependencies:</h3>
 					<ul class="dependencies">
 						{#if project.dependencies.length > 0}
@@ -310,25 +311,30 @@
 								{@const dProject = findDependency(dependency)!}
 								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
-									<a
-										target="_blank"
-										title={dependency.name}
-										href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
-									>
-										{dependency.name.replace('@rokucommunity/', '')}
-									</a>@{#if dependencyVersionIsDifferent}<a
+									<div class="dependency-container">
+										<a
 											target="_blank"
-											href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
+											class="dependency-name"
+											title={dependency.name}
+											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
 										>
-											{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;<span
-												class={dependency.versionFromTipOfReleaseLine === dProject.currentVersion ? 'dep-is-ready' : ''}
-												>{dProject?.currentVersion}</span
+											{dependency.name.replace('@rokucommunity/', '')}
+										</a>@{#if dependencyVersionIsDifferent}<a
+												class="dependency-version-link"
+												target="_blank"
+												href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
 											>
-										</a>{:else}<a
-											target="_blank"
-											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
-											>{dProject?.currentVersion}</a
-										>{/if}
+												<span class="dependency-start-version">{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;</span><span
+													class="dependency-end-version {dependency.versionFromTipOfReleaseLine === dProject.currentVersion
+														? 'dep-is-ready'
+														: ''}">{dProject?.currentVersion}</span
+												>
+											</a>{:else}<a
+												target="_blank"
+												href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
+												>{dProject?.currentVersion}</a
+											>{/if}
+									</div>
 								</li>
 							{/each}
 						{:else}
@@ -659,5 +665,22 @@
 	/* Style for whenever a dependency is up to date in the trunk (but that project has not yet released with that change) */
 	.dep-is-ready {
 		color: rgb(1, 183, 1) !important;
+	}
+
+	.dependency-container {
+		display: flex;
+		align-items: center;
+	}
+
+	.dependency-version-link {
+		display: flex;
+		flex-wrap: wrap;
+	}
+
+	.dependency-start-version {
+		white-space: nowrap;
+	}
+	.dependency-end-version {
+		white-space: nowrap;
 	}
 </style>
