@@ -49,7 +49,11 @@ export interface Project {
     /**
      * The version of the dependency that this project last released with
      */
-    currentVersion?: string;
+    versionFromTipOfReleaseLine?: string;
+    /**
+     * The version of the dependency that this project last released with
+     */
+    versionFromLatestRelease?: string;
   }>;
 
   /**

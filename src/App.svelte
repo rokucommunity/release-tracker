@@ -9,6 +9,7 @@
 	const MAX_COLLAPSED_COMMITS = 4;
 
 	const enableTestMode = false;
+	const commitsDebugFilter = enableTestMode ? ['brighterscript-formatter'] : [];
 
 	let projects = getAllProjects().filter((x) => x.hide !== true);
 
@@ -49,7 +50,7 @@
 			//generate a random semver version
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 			for (const dep of project.dependencies) {
-				dep.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+				dep.versionFromLatestRelease = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 			}
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 
@@ -63,16 +64,20 @@
 
 		//fetch head package.json
 		const response = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine.branch}/package.json`,
+			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine.branch}/package-lock.json`,
 			//prevent caching of this package.json since it could change at any time
 			cacheBusting: true
 		});
-		const packageJson = JSON.parse(response);
-		project.currentVersion = packageJson.version;
+		const packageLockJson = JSON.parse(response);
+		project.currentVersion = packageLockJson.version;
+		//now update the dependencies
+		for (const dependency of project.dependencies) {
+			dependency.versionFromTipOfReleaseLine ??= packageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
+		}
 
 		//fetch most recent release package-lock.json
 		const tagResponse = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/tags/v${packageJson.version}/package-lock.json`,
+			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/tags/v${packageLockJson.version}/package-lock.json`,
 			//this request can be cached since files from tag refs should never change
 			cacheInLocalStorage: true
 		});
@@ -82,7 +87,7 @@
 
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
-			dependency.currentVersion ??= tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
+			dependency.versionFromLatestRelease ??= tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
 		}
 
 		//fetch the latest patch file
@@ -94,10 +99,10 @@
 	 * Does this project have any unreleased commits? Returns `true` unless we can specifically determine that there are none
 	 */
 	async function fetchUnreleasedCommits(project: Project) {
-		//temporarily only run this for brighterscript to guard against rate limiting
-		// if (project.name !== 'brighterscript-formatter') {
-		// 	return undefined;
-		// }
+		//filter to only debug projects when enabled (to guard against rate limiting)
+		if (commitsDebugFilter.length > 0 && !commitsDebugFilter.includes(project.name)) {
+			return undefined;
+		}
 		const response = await octokit.rest.repos.compareCommits({
 			owner: project.repository.owner,
 			repo: project.repository.repository,
@@ -119,7 +124,7 @@
 		// Compute whether an update is required
 		const hasOutdatedDependencies = !project.dependencies.every((dep) => {
 			const dProject = projects.find((x) => x.name === dep.name);
-			return !dProject?.currentVersion || dProject.currentVersion === dep.currentVersion;
+			return !dProject?.currentVersion || dProject.currentVersion === dep.versionFromLatestRelease;
 		});
 		//projects who don't yet have their commits fetched will always be marked as needing an update
 		project.updateRequired = hasOutdatedDependencies || !project.unreleasedCommits || project.unreleasedCommits.length > 0;
@@ -303,7 +308,7 @@
 						{#if project.dependencies.length > 0}
 							{#each project.dependencies as dependency}
 								{@const dProject = findDependency(dependency)!}
-								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.currentVersion}
+								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 									<a
 										target="_blank"
@@ -312,9 +317,12 @@
 										{dependency.name}
 									</a>@{#if dependencyVersionIsDifferent}<a
 											target="_blank"
-											href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.currentVersion}...${dProject.releaseLine.branch}`}
+											href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
 										>
-											{dependency?.currentVersion}&nbsp;⇒&nbsp;{dProject?.currentVersion}
+											{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;<span
+												class={dependency.versionFromTipOfReleaseLine === dProject.currentVersion ? 'dep-is-ready' : ''}
+												>{dProject?.currentVersion}</span
+											>
 										</a>{:else}<a
 											target="_blank"
 											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
@@ -645,5 +653,10 @@
 	.dep-old::marker,
 	.dep-old a {
 		color: #fd7e14 !important;
+	}
+
+	/* Style for whenever a dependency is up to date in the trunk (but that project has not yet released with that change) */
+	.dep-is-ready {
+		color: rgb(1, 183, 1) !important;
 	}
 </style>
