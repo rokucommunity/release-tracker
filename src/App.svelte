@@ -9,9 +9,16 @@
 	const MAX_COLLAPSED_COMMITS = 4;
 
 	const enableTestMode = false;
-	const commitsDebugFilter = false ? ['brighterscript-formatter'] : [];
+	const commitsDebugFilter = true ? ['brighterscript-formatter'] : [];
 
 	let projects = getAllProjects().filter((x) => x.hide !== true);
+
+	const releaseLines = [
+		...projects.reduce((acc, project) => {
+			acc.add(project.releaseLine.name);
+			return acc;
+		}, new Set<string>())
+	];
 
 	const getReleaseLineClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
 
@@ -104,22 +111,22 @@
 			return undefined;
 		}
 		try {
-		const response = await octokit.rest.repos.compareCommits({
-			owner: project.repository.owner,
-			repo: project.repository.repository,
-			base: `v${project.currentVersion}`, // The tag to compare from
-			head: project.releaseLine.branch // The branch or commit to compare to
-		});
+			const response = await octokit.rest.repos.compareCommits({
+				owner: project.repository.owner,
+				repo: project.repository.repository,
+				base: `v${project.currentVersion}`, // The tag to compare from
+				head: project.releaseLine.branch // The branch or commit to compare to
+			});
 
-		const commits = response.data.commits; // Array of commits after the tag
-		if (commits.length > 0) {
+			const commits = response.data.commits; // Array of commits after the tag
+			if (commits.length > 0) {
 				console.log(
 					`${project.name} (${project.releaseLine.branch}): Found ${commits.length} commits after tag v${project.currentVersion}`
 				);
-			return commits; // There are unreleased commits
-		} else {
-			console.log(`${project.name} (${project.releaseLine.branch}): No commits found after tag v${project.currentVersion}`);
-			return []; // No unreleased commits
+				return commits; // There are unreleased commits
+			} else {
+				console.log(`${project.name} (${project.releaseLine.branch}): No commits found after tag v${project.currentVersion}`);
+				return []; // No unreleased commits
 			}
 		} catch (e) {
 			console.error(e);
@@ -230,128 +237,127 @@
 		<h1>RokuCommunity Release Tracker</h1>
 	</header>
 	<div class="content">
-		<div class="cards-container">
-			{#each projects as project}
-				<div
-					class="card {project.isLoading !== false
-						? 'loading'
-						: project.updateRequired
-							? 'update-available'
-							: 'no-updates'} {getReleaseLineClass(project.releaseLine.name)}"
-				>
-					<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
-					<h2 class="project-title">
-						<span class="status-icon"></span>
-						<a
-							target="_blank"
-							href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/tree/{project?.releaseLine.branch}"
-							>{project.name.replace('@rokucommunity/', '')}</a
-						>
-					</h2>
-					<div class="version-row">
-						<span>
-							<i>v{project.currentVersion}</i>
-						</span>
-						<a
-							class="button release-status-button"
-							on:click={() => toggleProjectUpdateActive(project)}
-							target="_blank"
-							href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
-						>
-							{#if project.isLoading !== false}
-								pending
-							{:else if project.updateRequired}
-								Start release
-							{:else}
-								Up to date
-							{/if}
-							{#if project.updateRequired}
-								<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
-									<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
-									<button class="button minor" on:click={() => dispatchRelease(project)}>minor</button>
-									<button class="button patch" on:click={() => dispatchRelease(project)}>patch</button>
-									<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
-								</div>
-							{/if}
-						</a>
-					</div>
+		{#each releaseLines as releaseLine}
+			<div class="releaseline-container {getReleaseLineClass(releaseLine)}">
+				<h2 class="releaseline-header">{releaseLine}</h2>
+				<div class="cards-container">
+					{#each projects.filter((x) => x.releaseLine.name === releaseLine) as project}
+						<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
+							<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
+							<h2 class="project-title">
+								<span class="status-icon"></span>
+								<a
+									target="_blank"
+									href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/tree/{project?.releaseLine.branch}"
+									>{project.name.replace('@rokucommunity/', '')}</a
+								>
+							</h2>
+							<div class="version-row">
+								<span>
+									<i>v{project.currentVersion}</i>
+								</span>
+								<a
+									class="button release-status-button"
+									on:click={() => toggleProjectUpdateActive(project)}
+									target="_blank"
+									href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
+								>
+									{#if project.isLoading !== false}
+										pending
+									{:else if project.updateRequired}
+										Start release
+									{:else}
+										Up to date
+									{/if}
+									{#if project.updateRequired}
+										<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
+											<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
+											<button class="button minor" on:click={() => dispatchRelease(project)}>minor</button>
+											<button class="button patch" on:click={() => dispatchRelease(project)}>patch</button>
+											<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
+										</div>
+									{/if}
+								</a>
+							</div>
 
-					<!-- unreleased commits-->
-					<div class="unreleased-commits">
-						<h3>
-							<a
-								target="_blank"
-								href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
-								>Code changes:
-							</a>
-						</h3>
-						<ul>
-							{#if !project.unreleasedCommits}
-								<li class="commits-not-fetched"><i>&lt;Commits not fetched&gt;</i></li>
-							{:else if project.unreleasedCommits?.length === 0}
-								<li class="faded"><i>No unreleased commits</i></li>
-							{:else}
-								{@const commits = getFilteredProjectCommits(project)}
-								{#each commits as commit}
-									<li>
-										<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
-											{commit.commit.message}
-										</a>
-									</li>
-								{/each}
-								{#if (project.unreleasedCommits?.length ?? 0) > MAX_COLLAPSED_COMMITS}
-									<li>
-										<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
-											>...show {project?.showAllCommits ? 'less' : `${project.unreleasedCommits.length - commits.length} more`}</button
-										>
-									</li>
-								{/if}
-							{/if}
-						</ul>
-					</div>
-
-					<!-- dependencies list -->
-					<h3>Dependencies:</h3>
-					<ul class="dependencies">
-						{#if project.dependencies.length > 0}
-							{#each project.dependencies as dependency}
-								{@const dProject = findDependency(dependency)!}
-								{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
-								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
-									<div class="dependency-container">
-										<a
-											target="_blank"
-											class="dependency-name"
-											title={dependency.name}
-											href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
-										>
-											{dependency.name.replace('@rokucommunity/', '')}
-										</a>@{#if dependencyVersionIsDifferent}<a
-												class="dependency-version-link"
-												target="_blank"
-												href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
-											>
-												<span class="dependency-start-version">{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;</span><span
-													class="dependency-end-version {dependency.versionFromTipOfReleaseLine === dProject.currentVersion
-														? 'dep-is-ready'
-														: ''}">{dProject?.currentVersion}</span
+							<!-- unreleased commits-->
+							<div class="unreleased-commits">
+								<h3>
+									<a
+										target="_blank"
+										href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
+										>Code changes:
+									</a>
+								</h3>
+								<ul>
+									{#if !project.unreleasedCommits}
+										<li class="commits-not-fetched"><i>&lt;Commits not fetched&gt;</i></li>
+									{:else if project.unreleasedCommits?.length === 0}
+										<li class="faded"><i>No unreleased commits</i></li>
+									{:else}
+										{@const commits = getFilteredProjectCommits(project)}
+										{#each commits as commit}
+											<li>
+												<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
+													{commit.commit.message}
+												</a>
+											</li>
+										{/each}
+										{#if (project.unreleasedCommits?.length ?? 0) > MAX_COLLAPSED_COMMITS}
+											<li>
+												<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
+													>...show {project?.showAllCommits ? 'less' : `${project.unreleasedCommits.length - commits.length} more`}</button
 												>
-											</a>{:else}<a
-												target="_blank"
-												href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
-												>{dProject?.currentVersion}</a
-											>{/if}
-									</div>
-								</li>
-							{/each}
-						{:else}
-							<li class="faded"><i>No dependencies</i></li>
-						{/if}
-					</ul>
-					<div class="release-line">{project.releaseLine.name}</div>
+											</li>
+										{/if}
+									{/if}
+								</ul>
+							</div>
+
+							<!-- dependencies list -->
+							<h3>Dependencies:</h3>
+							<ul class="dependencies">
+								{#if project.dependencies.length > 0}
+									{#each project.dependencies as dependency}
+										{@const dProject = findDependency(dependency)!}
+										{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
+										<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
+											<div class="dependency-container">
+												<a
+													target="_blank"
+													class="dependency-name"
+													title={dependency.name}
+													href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
+												>
+													{dependency.name.replace('@rokucommunity/', '')}
+												</a>@{#if dependencyVersionIsDifferent}<a
+														class="dependency-version-link"
+														target="_blank"
+														href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
+													>
+														<span class="dependency-start-version">{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;</span><span
+															class="dependency-end-version {dependency.versionFromTipOfReleaseLine === dProject.currentVersion
+																? 'dep-is-ready'
+																: ''}">{dProject?.currentVersion}</span
+														>
+													</a>{:else}<a
+														target="_blank"
+														href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
+														>{dProject?.currentVersion}</a
+													>{/if}
+											</div>
+										</li>
+									{/each}
+								{:else}
+									<li class="faded"><i>No dependencies</i></li>
+								{/if}
+							</ul>
+							<div class="releaseline-tag">{project.releaseLine.name}</div>
+						</div>
+					{/each}
 				</div>
-			{/each}
-		</div>
+			</div>
+		{/each}
 	</div>
 </main>
 
@@ -621,7 +627,43 @@
 		}
 	}
 
-	.release-line {
+	.releaseline1 {
+		--releaseline-card-bg: #1e2534;
+		--releaseline-tag-bg: #134489;
+	}
+
+	.releaseline2 {
+		--releaseline-card-bg: #271d2e;
+		--releaseline-tag-bg: #57227d;
+	}
+
+	.releaseline3 {
+		--releaseline-card-bg: #1e2e2e;
+		--releaseline-tag-bg: #2b4c4c;
+	}
+
+	.releaseline-header {
+		padding: 5px;
+		border-radius: 4px;
+		border-bottom-left-radius: 0;
+		border-bottom-right-radius: 0;
+		background-color: var(--releaseline-tag-bg);
+		margin-top: 0;
+	}
+
+	.releaseline-container {
+		border: 1px solid var(--releaseline-tag-bg);
+		border-radius: 5px;
+		padding-bottom: 10px;
+		margin-bottom: 20px;
+	}
+
+	.card {
+		background-color: var(--releaseline-card-bg);
+	}
+
+	.releaseline-tag {
+		background-color: var(--releaseline-tag-bg);
 		position: absolute;
 		bottom: 0.5rem;
 		right: 0.5rem;
@@ -632,30 +674,7 @@
 		padding-right: 5px;
 		font-size: 0.75rem;
 		font-weight: bold;
-	}
-
-	.card.releaseline1 {
-		background-color: #1e2534;
-	}
-
-	.releaseline1 .release-line {
-		background-color: #134489;
-	}
-
-	.card.releaseline2 {
-		background-color: #271d2e;
-	}
-
-	.releaseline2 .release-line {
-		background-color: #57227d;
-	}
-
-	.card.releaseline3 {
-		background-color: #1e2e2e;
-	}
-
-	.releaseline3 .release-line {
-		background-color: #265757;
+		display: none;
 	}
 
 	.dependencies li,
