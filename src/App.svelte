@@ -9,7 +9,7 @@
 	const MAX_COLLAPSED_COMMITS = 4;
 
 	const enableTestMode = false;
-	const commitsDebugFilter = true ? ['brighterscript-formatter'] : [];
+	const commitsDebugFilter = false ? ['brighterscript-formatter'] : [];
 
 	let projects = getAllProjects().filter((x) => x.hide !== true);
 
@@ -245,9 +245,9 @@
 	</header>
 	<div class="content">
 		{#each releaseLines as releaseLine}
-			<div class="releaseline-container {getReleaseLineClass(releaseLine)}">
+			<div class="releaseline-container {getReleaseLineClass(releaseLine)} {collapsedReleaseLines[releaseLine] ? 'collapsed' : 'expanded'}">
 				<h2 class="releaseline-header" on:click={() => toggleReleaseLineCollapsed(releaseLine)}>{releaseLine}</h2>
-				<div class="cards-container {collapsedReleaseLines[releaseLine] ? 'collapsed' : ''}">
+				<div class="cards-container">
 					{#each projects.filter((x) => x.releaseLine.name === releaseLine) as project}
 						<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
 							<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
@@ -363,14 +363,34 @@
 						</div>
 					{/each}
 				</div>
+				<div class="expand-button-container">
+					<i class="expand-button" on:click={() => toggleReleaseLineCollapsed(releaseLine)}>Show all projects</i>
+				</div>
 			</div>
 		{/each}
 	</div>
 </main>
 
 <style>
+	:root {
+		interpolate-size: allow-keywords;
+	}
+
 	.content {
 		margin: 8px;
+	}
+
+	.expand-button:hover {
+		font-style: italic;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.expanded .expand-button-container {
+		display: none !important;
+	}
+
+	.expand-button-container {
+		text-align: center;
 	}
 
 	.show-more {
@@ -497,6 +517,7 @@
 		justify-content: center;
 		padding: 0 2rem;
 		overflow: hidden;
+		transition: all 0.18s ease-in-out;
 	}
 
 	.card {
@@ -667,8 +688,8 @@
 		margin-bottom: 20px;
 	}
 
-	.collapsed {
-		max-height: 0;
+	.collapsed .cards-container {
+		height: 0;
 	}
 
 	.card {
