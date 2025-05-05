@@ -312,9 +312,10 @@
 								<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 									<a
 										target="_blank"
+										title={dependency.name}
 										href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
 									>
-										{dependency.name}
+										{dependency.name.replace('@rokucommunity/', '')}
 									</a>@{#if dependencyVersionIsDifferent}<a
 											target="_blank"
 											href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
