@@ -287,10 +287,10 @@
 										</a>
 									</li>
 								{/each}
-								{#if project.unreleasedCommits?.length ?? 0 > MAX_COLLAPSED_COMMITS}
+								{#if (project.unreleasedCommits?.length ?? 0) > MAX_COLLAPSED_COMMITS}
 									<li>
 										<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
-											>...show {project?.showAllCommits ? 'less' : `more`}</button
+											>...show {project?.showAllCommits ? 'less' : `${project.unreleasedCommits.length - commits.length} more`}</button
 										>
 									</li>
 								{/if}
