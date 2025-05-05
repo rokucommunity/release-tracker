@@ -22,6 +22,8 @@
 
 	const getReleaseLineClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
 
+	let collapsedReleaseLines: Record<string, boolean> = {};
+
 	/**
 	 * When clicking on a project's "update required" button, this is the project you clicked the button for.
 	 */
@@ -182,6 +184,11 @@
 		projects = projects;
 	}
 
+	function toggleReleaseLineCollapsed(releaseLine: string) {
+		collapsedReleaseLines[releaseLine] = !collapsedReleaseLines[releaseLine];
+		collapsedReleaseLines = collapsedReleaseLines;
+	}
+
 	/**
 	 * Refreshes the project and all of its dependencies
 	 */
@@ -239,8 +246,8 @@
 	<div class="content">
 		{#each releaseLines as releaseLine}
 			<div class="releaseline-container {getReleaseLineClass(releaseLine)}">
-				<h2 class="releaseline-header">{releaseLine}</h2>
-				<div class="cards-container">
+				<h2 class="releaseline-header" on:click={() => toggleReleaseLineCollapsed(releaseLine)}>{releaseLine}</h2>
+				<div class="cards-container {collapsedReleaseLines[releaseLine] ? 'collapsed' : ''}">
 					{#each projects.filter((x) => x.releaseLine.name === releaseLine) as project}
 						<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
 							<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
@@ -484,11 +491,12 @@
 	}
 
 	.cards-container {
-		display: grid; /* Use CSS Grid */
-		grid-template-columns: repeat(auto-fit, 350px); /* Fixed card width */
-		gap: 1rem; /* Space between cards */
-		justify-content: center; /* Center the grid horizontally */
-		padding: 0 2rem; /* Add padding to the left and right */
+		display: grid;
+		grid-template-columns: repeat(auto-fit, 350px);
+		gap: 1rem;
+		justify-content: center;
+		padding: 0 2rem;
+		overflow: hidden;
 	}
 
 	.card {
@@ -649,13 +657,18 @@
 		border-bottom-right-radius: 0;
 		background-color: var(--releaseline-tag-bg);
 		margin-top: 0;
+		cursor: pointer;
 	}
 
 	.releaseline-container {
-		border: 1px solid var(--releaseline-tag-bg);
+		border: 2px solid var(--releaseline-tag-bg);
 		border-radius: 5px;
 		padding-bottom: 10px;
 		margin-bottom: 20px;
+	}
+
+	.collapsed {
+		max-height: 0;
 	}
 
 	.card {

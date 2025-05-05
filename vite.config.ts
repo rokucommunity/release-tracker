@@ -10,6 +10,8 @@ export default defineConfig({
         if (warning.code === "a11y_click_events_have_key_events") return true;
         if (warning.code === "a11y-no-static-element-interactions") return true;
         if (warning.code === "a11y_no_static_element_interactions") return true;
+        if (warning.code === "a11y_no_noninteractive_element_interactions") return true;
+        if (warning.code === "a11y-no-noninteractive-element-interactions") return true;
         // Otherwise, let Svelte handle it
         return false
       }
