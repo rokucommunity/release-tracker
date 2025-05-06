@@ -7,10 +7,17 @@
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
-	const enableTestMode = false;
-	const commitsDebugFilter = false ? ['@rokucommunity/logger'] : [];
-
 	let projects = getAllProjects().filter((x) => x.hide !== true);
+
+	//DEBUGGING features
+	let enableTestMode = false;
+	let commitsDebugFilter: string[] = [];
+
+	// enableTestMode = true;
+	// commitsDebugFilter.push('brighterscript-formatter');
+	// projects = projects.filter(
+	// 	(x) => x.releaseLine.name === 'mainline' && ['brighterscript', 'brighterscript-formatter', '@rokucommunity/bslib', '@rokucommunity/logger', 'roku-deploy'].includes(x.name) === true
+	// );
 
 	const releaseLines = [
 		...projects.reduce((acc, project) => {
@@ -80,13 +87,13 @@
 		project.currentVersion = packageLockJson.version;
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
-			dependency.versionFromTipOfReleaseLine ??= packageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
+			dependency.versionFromTipOfReleaseLine = packageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
 		}
 
 		//fetch most recent release package-lock.json
 		const tagResponse = await http.get({
 			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/tags/v${packageLockJson.version}/package-lock.json`,
-			//prevent caching of this package.json since it could change at any time
+			//when making a request, prevent it from being cached by the browser
 			cacheBusting: true,
 			//this request can be cached since files from tag refs should never change
 			cacheInLocalStorage: true
@@ -97,7 +104,7 @@
 
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
-			dependency.versionFromLatestRelease ??= tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
+			dependency.versionFromLatestRelease = tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
 		}
 
 		//fetch the latest patch file
@@ -265,7 +272,11 @@
 							</h2>
 							<div class="version-row">
 								<span>
-									<a target="_blank" href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/releases/tag/v{project.currentVersion}"><i>v{project.currentVersion}</i></a>
+									<a
+										target="_blank"
+										href="https://github.com/{project?.repository.owner}/{project?.repository
+											?.repository}/releases/tag/v{project.currentVersion}"><i>v{project.currentVersion}</i></a
+									>
 								</span>
 								<a
 									class="button release-status-button"
