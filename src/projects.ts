@@ -100,6 +100,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/bslib',
+      hide: true,
       repository: {
         owner: 'rokucommunity',
         repository: 'bslib'
@@ -121,10 +122,10 @@ export function getAllProjects(): Project[] {
         branch: 'master',
       },
       dependencies: [
-        {
-          name: '@rokucommunity/bslib',
-          releaseLine: 'mainline'
-        },
+        // {
+        //   name: '@rokucommunity/bslib',
+        //   releaseLine: 'mainline'
+        // },
         {
           name: '@rokucommunity/logger',
           releaseLine: 'mainline'
@@ -386,10 +387,10 @@ export function getAllProjects(): Project[] {
         branch: 'v1'
       },
       dependencies: [
-        {
-          name: '@rokucommunity/bslib',
-          releaseLine: 'mainline'
-        },
+        // {
+        //   name: '@rokucommunity/bslib',
+        //   releaseLine: 'mainline'
+        // },
         {
           name: '@rokucommunity/logger',
           releaseLine: 'mainline'
