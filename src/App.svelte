@@ -200,7 +200,13 @@
 	/**
 	 * Refreshes the project and all of its dependencies
 	 */
-	async function refreshProject(project: Project, handledProjects: Project[] = []) {
+	async function refreshProject(
+		project: Project,
+		options?: { refreshDependencies?: boolean; handledProjects?: Project[]; skipSelf?: boolean }
+	) {
+		const handledProjects = options?.handledProjects ?? [];
+		const refreshDependencies = options?.refreshDependencies ?? true;
+
 		//if we have already refreshed this project, don't do it again
 		if (handledProjects.includes(project)) {
 			return;
@@ -215,17 +221,22 @@
 		//add a small timeout to let the UI show the loading state
 		await sleep(300);
 
-		//first refresh all of the project's dependencies
-		for (const dependency of project.dependencies) {
-			const dProject = findDependency(dependency);
+		if (refreshDependencies) {
+			//first refresh all of the project's dependencies
+			for (const dependency of project.dependencies) {
+				const dProject = findDependency(dependency);
 
-			//if we aren't actively reloading this project, reload it now
-			if (dProject) {
-				await refreshProject(dProject, handledProjects);
+				//if we aren't actively reloading this project, reload it now
+				if (dProject) {
+					await refreshProject(dProject, { refreshDependencies: refreshDependencies, handledProjects: handledProjects });
+				}
 			}
 		}
-		//now refresh this project
-		await hydrateProject(project);
+
+		if (options?.skipSelf !== true) {
+			//now refresh this project
+			await hydrateProject(project);
+		}
 
 		//do another pass to ensure all projects are up to date
 		for (const project of projects) {
@@ -239,7 +250,7 @@
 	async function hydrateProjects() {
 		let handledProjects: Project[] = [];
 		for (const project of projects) {
-			refreshProject(project, handledProjects);
+			refreshProject(project, { handledProjects: handledProjects });
 		}
 	}
 
@@ -261,7 +272,12 @@
 				<div class="cards-container">
 					{#each projects.filter((x) => x.releaseLine.name === releaseLine) as project}
 						<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
-							<button class="refresh-button" on:click={() => refreshProject(project)}>⟳</button>
+							<button
+								class="refresh-button"
+								title="click to refresh this project. doubleclick to refresh dependencies"
+								on:click={() => refreshProject(project, { refreshDependencies: false })}
+								on:dblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button
+							>
 							<h2 class="project-title">
 								<span class="status-icon"></span>
 								<a
