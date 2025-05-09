@@ -211,7 +211,7 @@ export function getAllProjects(): Project[] {
       name: 'ropm',
       repository: {
         owner: 'rokucommunity',
-        repository: 'brs'
+        repository: 'ropm'
       },
       releaseLine: {
         name: 'mainline',
