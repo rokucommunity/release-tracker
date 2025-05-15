@@ -147,7 +147,7 @@
 	function computeProjectNeedsUpdate(project: Project) {
 		// Compute whether an update is required
 		const hasOutdatedDependencies = !project.dependencies.every((dep) => {
-			const dProject = projects.find((x) => x.name === dep.name);
+			const dProject = projects.find((x) => x.name === dep.name && x.releaseLine.name === dep.releaseLine);
 			return !dProject?.currentVersion || dProject.currentVersion === dep.versionFromLatestRelease;
 		});
 		//projects who don't yet have their commits fetched will always be marked as needing an update
