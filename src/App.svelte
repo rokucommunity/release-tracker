@@ -151,7 +151,11 @@
 			return !dProject?.currentVersion || dProject.currentVersion === dep.versionFromLatestRelease;
 		});
 		//projects who don't yet have their commits fetched will always be marked as needing an update
-		project.updateRequired = hasOutdatedDependencies || !project.unreleasedCommits || project.unreleasedCommits.length > 0;
+		const unreleasedFilteredCommits =
+			project.unreleasedCommits
+				?.filter((x) => !x.commit.message.startsWith('(chore)'))
+				?.filter((x) => !x.commit.message.startsWith('chore')) ?? [];
+		project.updateRequired = hasOutdatedDependencies || !project.unreleasedCommits || unreleasedFilteredCommits.length > 0;
 	}
 
 	function dispatchRelease(project: Project) {
