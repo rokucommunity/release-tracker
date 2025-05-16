@@ -339,7 +339,11 @@
 									{:else}
 										{@const commits = getFilteredProjectCommits(project)}
 										{#each commits as commit}
-											<li>
+											<li
+												class={commit.commit.message.startsWith('chore') || commit.commit.message.startsWith('(chore)')
+													? 'commit-chore'
+													: ''}
+											>
 												<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
 													{commit.commit.message}
 												</a>
@@ -455,6 +459,14 @@
 		margin-block-start: 0;
 		margin-block-end: 0;
 		margin-left: 13px;
+	}
+
+	.commit-chore {
+		list-style-type: circle;
+	}
+
+	.commit-chore .commit-link {
+		color: #888;
 	}
 
 	.commit-link {
