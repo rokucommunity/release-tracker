@@ -147,11 +147,15 @@
 	function computeProjectNeedsUpdate(project: Project) {
 		// Compute whether an update is required
 		const hasOutdatedDependencies = !project.dependencies.every((dep) => {
-			const dProject = projects.find((x) => x.name === dep.name);
+			const dProject = projects.find((x) => x.name === dep.name && x.releaseLine.name === dep.releaseLine);
 			return !dProject?.currentVersion || dProject.currentVersion === dep.versionFromLatestRelease;
 		});
 		//projects who don't yet have their commits fetched will always be marked as needing an update
-		project.updateRequired = hasOutdatedDependencies || !project.unreleasedCommits || project.unreleasedCommits.length > 0;
+		const unreleasedFilteredCommits =
+			project.unreleasedCommits
+				?.filter((x) => !x.commit.message.startsWith('(chore)'))
+				?.filter((x) => !x.commit.message.startsWith('chore')) ?? [];
+		project.updateRequired = hasOutdatedDependencies || !project.unreleasedCommits || unreleasedFilteredCommits.length > 0;
 	}
 
 	function dispatchRelease(project: Project) {
@@ -335,7 +339,11 @@
 									{:else}
 										{@const commits = getFilteredProjectCommits(project)}
 										{#each commits as commit}
-											<li>
+											<li
+												class={commit.commit.message.startsWith('chore') || commit.commit.message.startsWith('(chore)')
+													? 'commit-chore'
+													: ''}
+											>
 												<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
 													{commit.commit.message}
 												</a>
@@ -451,6 +459,14 @@
 		margin-block-start: 0;
 		margin-block-end: 0;
 		margin-left: 13px;
+	}
+
+	.commit-chore {
+		list-style-type: circle;
+	}
+
+	.commit-chore .commit-link {
+		color: #888;
 	}
 
 	.commit-link {
