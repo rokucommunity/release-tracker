@@ -284,6 +284,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'roku-promise',
+      hide: true,
       repository: {
         owner: 'rokucommunity',
         repository: 'roku-promise'
