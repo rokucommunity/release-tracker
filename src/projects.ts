@@ -360,6 +360,27 @@ export function getAllProjects(): Project[] {
       ]
     },
     {
+      name: '@rokucommunity/sgRouter',
+      repository: {
+        owner: 'rokucommunity',
+        repository: 'sgRouter'
+      },
+      releaseLine: {
+        name: 'mainline',
+        branch: 'master',
+      },
+      dependencies: [
+        {
+          name: '@rokucommunity/promises',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'brighterscript',
+          releaseLine: 'mainline'
+        }
+      ]
+    },
+    {
       name: 'bsc-plugin-inline-annotation',
       hide: true,
       repository: {
