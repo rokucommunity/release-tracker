@@ -7,7 +7,140 @@
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
-	let projects = getAllProjects().filter((x) => x.hide !== true);
+	let projects = $state(getAllProjects().filter((x) => x.hide !== true));
+
+	/**
+	 * View mode: 'default' shows projects grouped by release line (original view),
+	 * 'release-flow' shows projects in dependency tiers within each release line.
+	 */
+	let viewMode: 'default' | 'release-flow' = $state('default');
+
+	/**
+	 * Compute dependency tiers for projects within a release line.
+	 * Tier 0 = no dependencies (or all deps are outside this release line)
+	 * Tier 1 = depends only on tier 0 projects
+	 * Tier N = depends on projects from tiers 0..N-1
+	 *
+	 * Dependencies that reference other release lines are resolved by finding
+	 * the referenced project's tier in its own release line, treating cross-release-line
+	 * deps as already satisfied (tier 0).
+	 */
+	function computeTiers(releaseLineProjects: Project[], allProjects: Project[]): { tier: number; projects: Project[] }[] {
+		const tierMap = new Map<Project, number>();
+
+		// Build a lookup: (name, releaseLine) -> Project
+		const projectLookup = new Map<string, Project>();
+		for (const p of allProjects) {
+			projectLookup.set(`${p.name}::${p.releaseLine.name}`, p);
+		}
+
+		// Iteratively assign tiers
+		const unassigned = new Set(releaseLineProjects);
+		let currentTier = 0;
+		const maxIterations = releaseLineProjects.length + 1;
+
+		while (unassigned.size > 0 && currentTier < maxIterations) {
+			const assignedThisRound: Project[] = [];
+
+			for (const project of unassigned) {
+				const allDepsResolved = project.dependencies.every((dep) => {
+					const depProject = projectLookup.get(`${dep.name}::${dep.releaseLine}`);
+					if (!depProject) {
+						// Dependency not tracked at all - treat as satisfied
+						return true;
+					}
+					if (!unassigned.has(depProject) && !releaseLineProjects.includes(depProject)) {
+						// Dependency is in a different release line - treat as satisfied (tier 0 equivalent)
+						return true;
+					}
+					if (releaseLineProjects.includes(depProject)) {
+						// Dependency is in this release line - must already have a tier assigned
+						return tierMap.has(depProject);
+					}
+					// Dependency is outside this release line - satisfied
+					return true;
+				});
+
+				if (allDepsResolved) {
+					assignedThisRound.push(project);
+				}
+			}
+
+			for (const p of assignedThisRound) {
+				tierMap.set(p, currentTier);
+				unassigned.delete(p);
+			}
+
+			if (assignedThisRound.length === 0) {
+				// Circular dependency or unresolvable - assign remaining to current tier
+				for (const p of unassigned) {
+					tierMap.set(p, currentTier);
+				}
+				break;
+			}
+
+			currentTier++;
+		}
+
+		// Group by tier
+		const tiers = new Map<number, Project[]>();
+		for (const [project, tier] of tierMap) {
+			if (!tiers.has(tier)) {
+				tiers.set(tier, []);
+			}
+			tiers.get(tier)!.push(project);
+		}
+
+		// Sort and return
+		return [...tiers.entries()]
+			.sort(([a], [b]) => a - b)
+			.map(([tier, projects]) => ({ tier, projects }));
+	}
+
+	/**
+	 * Check if all projects in prior tiers (for a given release line) are up to date,
+	 * meaning this tier is ready to release.
+	 */
+	function isTierReady(releaseLine: string, tierIndex: number, allTiers: { tier: number; projects: Project[] }[]): boolean {
+		// Tier 0 is always ready (no prior tiers)
+		if (tierIndex === 0) return true;
+
+		// Check all projects in tiers before this one
+		for (let i = 0; i < tierIndex; i++) {
+			for (const project of allTiers[i].projects) {
+				if (project.isLoading !== false) return false;
+				if (project.updateRequired) return false;
+			}
+		}
+		return true;
+	}
+
+	function getTierStatus(releaseLine: string, tierIndex: number, allTiers: { tier: number; projects: Project[] }[]): 'ready' | 'blocked' | 'pending' | 'done' {
+		const tierProjects = allTiers[tierIndex].projects;
+		const anyLoading = tierProjects.some(p => p.isLoading !== false);
+		if (anyLoading) return 'pending';
+
+		// If all projects in this tier are up to date, it's done
+		const allUpToDate = tierProjects.every(p => !p.updateRequired);
+		if (allUpToDate) return 'done';
+
+		// Check if prior tiers are all up to date
+		if (tierIndex === 0) return 'ready';
+		const priorReady = isTierReady(releaseLine, tierIndex, allTiers);
+		const anyPriorLoading = allTiers.slice(0, tierIndex).some(t => t.projects.some(p => p.isLoading !== false));
+		if (anyPriorLoading) return 'pending';
+		return priorReady ? 'ready' : 'blocked';
+	}
+
+	function getTierStatusLabel(status: string): string {
+		switch (status) {
+			case 'ready': return 'Ready to release';
+			case 'blocked': return 'Blocked';
+			case 'pending': return 'Pending';
+			case 'done': return 'Up to date';
+			default: return status;
+		}
+	}
 
 	//DEBUGGING features
 	let enableTestMode = false;
@@ -28,12 +161,12 @@
 
 	const getReleaseLineClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
 
-	let collapsedReleaseLines: Record<string, boolean> = {};
+	let collapsedReleaseLines: Record<string, boolean> = $state({});
 
 	/**
 	 * When clicking on a project's "update required" button, this is the project you clicked the button for.
 	 */
-	let selectedProjectForUpdate: Project | undefined;
+	let selectedProjectForUpdate: Project | undefined = $state();
 
 	const MyOctokit = Octokit.plugin(throttling);
 	const octokit = new MyOctokit({
@@ -262,146 +395,177 @@
 	hydrateProjects();
 </script>
 
+{#snippet projectCard(project: Project)}
+	<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
+		<button
+			class="refresh-button"
+			title="click to refresh this project. doubleclick to refresh dependencies"
+			on:click={() => refreshProject(project, { refreshDependencies: false })}
+			on:dblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button
+		>
+		<h2 class="project-title">
+			<span class="status-icon"></span>
+			<a
+				target="_blank"
+				href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/tree/{project?.releaseLine.branch}"
+				>{project.name.replace('@rokucommunity/', '')}</a
+			>
+		</h2>
+		<div class="version-row">
+			<span>
+				<a
+					target="_blank"
+					href="https://github.com/{project?.repository.owner}/{project?.repository
+						?.repository}/releases/tag/v{project.currentVersion}"><i>v{project.currentVersion}</i></a
+				>
+			</span>
+			<a
+				class="button release-status-button"
+				on:click={() => toggleProjectUpdateActive(project)}
+				target="_blank"
+				href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
+			>
+				{#if project.isLoading !== false}
+					pending
+				{:else if project.updateRequired}
+					Start release
+				{:else}
+					Up to date
+				{/if}
+				{#if project.updateRequired}
+					<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
+						<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
+						<button class="button minor" on:click={() => dispatchRelease(project)}>minor</button>
+						<button class="button patch" on:click={() => dispatchRelease(project)}>patch</button>
+						<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
+					</div>
+				{/if}
+			</a>
+		</div>
+
+		<!-- unreleased commits-->
+		<div class="unreleased-commits">
+			<h3>
+				<a
+					target="_blank"
+					href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
+					>Code changes:
+				</a>
+			</h3>
+			<ul>
+				{#if !project.unreleasedCommits}
+					<li class="commits-not-fetched"><i>&lt;Commits not fetched&gt;</i></li>
+				{:else if project.unreleasedCommits?.length === 0}
+					<li class="faded"><i>No unreleased commits</i></li>
+				{:else}
+					{@const commits = getFilteredProjectCommits(project)}
+					{#each commits as commit}
+						<li
+							class={commit.commit.message.startsWith('chore') || commit.commit.message.startsWith('(chore)')
+								? 'commit-chore'
+								: ''}
+						>
+							<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
+								{commit.commit.message}
+							</a>
+						</li>
+					{/each}
+					{#if (project.unreleasedCommits?.length ?? 0) > MAX_COLLAPSED_COMMITS}
+						<li>
+							<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
+								>...show {project?.showAllCommits ? 'less' : `${project.unreleasedCommits.length - commits.length} more`}</button
+							>
+						</li>
+					{/if}
+				{/if}
+			</ul>
+		</div>
+
+		<!-- dependencies list -->
+		<h3>Dependencies:</h3>
+		<ul class="dependencies">
+			{#if project.dependencies.length > 0}
+				{#each project.dependencies as dependency}
+					{@const dProject = findDependency(dependency)!}
+					{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
+					<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
+						<div class="dependency-container">
+							<a
+								target="_blank"
+								class="dependency-name"
+								title={dependency.name}
+								href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
+							>
+								{dependency.name.replace('@rokucommunity/', '')}
+							</a>@{#if dependencyVersionIsDifferent}<a
+									class="dependency-version-link"
+									target="_blank"
+									href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
+								>
+									<span class="dependency-start-version">{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;</span><span
+										class="dependency-end-version {dependency.versionFromTipOfReleaseLine === dProject.currentVersion
+											? 'dep-is-ready'
+											: ''}">{dProject?.currentVersion}</span
+									>
+								</a>{:else}<a
+									target="_blank"
+									href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
+									>{dProject?.currentVersion}</a
+								>{/if}
+						</div>
+					</li>
+				{/each}
+			{:else}
+				<li class="faded"><i>No dependencies</i></li>
+			{/if}
+		</ul>
+		<div class="releaseline-tag">{project.releaseLine.name}</div>
+	</div>
+{/snippet}
+
 <main>
 	<header class="navbar">
 		<h1>RokuCommunity Release Tracker</h1>
-		<a href="https://github.com/rokucommunity/release-tracker" title="View this project on GitHub" target="_blank">
-			<img src="github-mark-white.png" alt="GitHub" width="30" height="30" />
-		</a>
+		<div class="navbar-actions">
+			<div class="view-switch" on:click={() => viewMode = viewMode === 'default' ? 'release-flow' : 'default'} role="switch" aria-checked={viewMode === 'release-flow'}>
+				<span class="view-switch-option {viewMode === 'default' ? 'active' : ''}">Default</span>
+				<span class="view-switch-option {viewMode === 'release-flow' ? 'active' : ''}">Release Flow</span>
+			</div>
+			<a href="https://github.com/rokucommunity/release-tracker" title="View this project on GitHub" target="_blank">
+				<img src="github-mark-white.png" alt="GitHub" width="30" height="30" />
+			</a>
+		</div>
 	</header>
 	<div class="content">
 		{#each releaseLines as releaseLine}
 			<div class="releaseline-container {getReleaseLineClass(releaseLine)} {collapsedReleaseLines[releaseLine] ? 'collapsed' : 'expanded'}">
 				<h2 class="releaseline-header" on:click={() => toggleReleaseLineCollapsed(releaseLine)}>{releaseLine}</h2>
-				<div class="cards-container">
-					{#each projects.filter((x) => x.releaseLine.name === releaseLine) as project}
-						<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
-							<button
-								class="refresh-button"
-								title="click to refresh this project. doubleclick to refresh dependencies"
-								on:click={() => refreshProject(project, { refreshDependencies: false })}
-								on:dblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button
-							>
-							<h2 class="project-title">
-								<span class="status-icon"></span>
-								<a
-									target="_blank"
-									href="https://github.com/{project?.repository.owner}/{project?.repository?.repository}/tree/{project?.releaseLine.branch}"
-									>{project.name.replace('@rokucommunity/', '')}</a
-								>
-							</h2>
-							<div class="version-row">
-								<span>
-									<a
-										target="_blank"
-										href="https://github.com/{project?.repository.owner}/{project?.repository
-											?.repository}/releases/tag/v{project.currentVersion}"><i>v{project.currentVersion}</i></a
-									>
-								</span>
-								<a
-									class="button release-status-button"
-									on:click={() => toggleProjectUpdateActive(project)}
-									target="_blank"
-									href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
-								>
-									{#if project.isLoading !== false}
-										pending
-									{:else if project.updateRequired}
-										Start release
-									{:else}
-										Up to date
-									{/if}
-									{#if project.updateRequired}
-										<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
-											<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
-											<button class="button minor" on:click={() => dispatchRelease(project)}>minor</button>
-											<button class="button patch" on:click={() => dispatchRelease(project)}>patch</button>
-											<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
-										</div>
-									{/if}
-								</a>
-							</div>
 
-							<!-- unreleased commits-->
-							<div class="unreleased-commits">
-								<h3>
-									<a
-										target="_blank"
-										href={`https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`}
-										>Code changes:
-									</a>
-								</h3>
-								<ul>
-									{#if !project.unreleasedCommits}
-										<li class="commits-not-fetched"><i>&lt;Commits not fetched&gt;</i></li>
-									{:else if project.unreleasedCommits?.length === 0}
-										<li class="faded"><i>No unreleased commits</i></li>
-									{:else}
-										{@const commits = getFilteredProjectCommits(project)}
-										{#each commits as commit}
-											<li
-												class={commit.commit.message.startsWith('chore') || commit.commit.message.startsWith('(chore)')
-													? 'commit-chore'
-													: ''}
-											>
-												<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
-													{commit.commit.message}
-												</a>
-											</li>
-										{/each}
-										{#if (project.unreleasedCommits?.length ?? 0) > MAX_COLLAPSED_COMMITS}
-											<li>
-												<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
-													>...show {project?.showAllCommits ? 'less' : `${project.unreleasedCommits.length - commits.length} more`}</button
-												>
-											</li>
-										{/if}
-									{/if}
-								</ul>
+				{#if viewMode === 'default'}
+					<div class="cards-container">
+						{#each projects.filter((x) => x.releaseLine.name === releaseLine) as project}
+							{@render projectCard(project)}
+						{/each}
+					</div>
+				{:else}
+					{@const releaseLineProjects = projects.filter((x) => x.releaseLine.name === releaseLine)}
+					{@const tiers = computeTiers(releaseLineProjects, projects)}
+					{#each tiers as tierData, tierIndex}
+						{@const status = getTierStatus(releaseLine, tierIndex, tiers)}
+						<div class="tier-container tier-{status}">
+							<div class="tier-header">
+								<span class="tier-label">Tier {tierData.tier + 1}</span>
+								<span class="tier-status">{getTierStatusLabel(status)}</span>
 							</div>
-
-							<!-- dependencies list -->
-							<h3>Dependencies:</h3>
-							<ul class="dependencies">
-								{#if project.dependencies.length > 0}
-									{#each project.dependencies as dependency}
-										{@const dProject = findDependency(dependency)!}
-										{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
-										<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
-											<div class="dependency-container">
-												<a
-													target="_blank"
-													class="dependency-name"
-													title={dependency.name}
-													href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/tree/${dProject?.releaseLine.branch}`}
-												>
-													{dependency.name.replace('@rokucommunity/', '')}
-												</a>@{#if dependencyVersionIsDifferent}<a
-														class="dependency-version-link"
-														target="_blank"
-														href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
-													>
-														<span class="dependency-start-version">{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;</span><span
-															class="dependency-end-version {dependency.versionFromTipOfReleaseLine === dProject.currentVersion
-																? 'dep-is-ready'
-																: ''}">{dProject?.currentVersion}</span
-														>
-													</a>{:else}<a
-														target="_blank"
-														href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
-														>{dProject?.currentVersion}</a
-													>{/if}
-											</div>
-										</li>
-									{/each}
-								{:else}
-									<li class="faded"><i>No dependencies</i></li>
-								{/if}
-							</ul>
-							<div class="releaseline-tag">{project.releaseLine.name}</div>
+							<div class="cards-container">
+								{#each tierData.projects as project}
+									{@render projectCard(project)}
+								{/each}
+							</div>
 						</div>
 					{/each}
-				</div>
+				{/if}
+
 				<div class="expand-button-container">
 					<i class="expand-button" on:click={() => toggleReleaseLineCollapsed(releaseLine)}>Show all projects</i>
 				</div>
@@ -793,5 +957,103 @@
 
 	.commits-not-fetched {
 		color: #dc3545;
+	}
+
+	/* View switch */
+	.navbar-actions {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.view-switch {
+		display: flex;
+		background-color: rgba(255, 255, 255, 0.08);
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 6px;
+		padding: 2px;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.view-switch-option {
+		padding: 0.3rem 0.7rem;
+		border-radius: 4px;
+		font-size: 0.8rem;
+		color: rgba(217, 217, 217, 0.5);
+		transition: all 0.15s ease;
+	}
+
+	.view-switch-option.active {
+		background-color: rgba(255, 255, 255, 0.15);
+		color: rgb(240, 240, 240);
+		font-weight: bold;
+	}
+
+	/* Release flow tier styles */
+	.tier-container {
+		margin: 0.75rem 1rem;
+		border-radius: 6px;
+		overflow: hidden;
+		border-left: 4px solid var(--tier-accent);
+		border-top: 1px solid var(--tier-border);
+		border-right: 1px solid var(--tier-border);
+		border-bottom: 1px solid var(--tier-border);
+	}
+
+	.tier-ready {
+		--tier-accent: #4caf50;
+		--tier-border: rgba(76, 175, 80, 0.3);
+		--tier-header-bg: rgba(76, 175, 80, 0.12);
+		--tier-label-color: #4caf50;
+	}
+
+	.tier-blocked {
+		--tier-accent: #fd7e14;
+		--tier-border: rgba(253, 126, 20, 0.3);
+		--tier-header-bg: rgba(253, 126, 20, 0.12);
+		--tier-label-color: #fd7e14;
+	}
+
+	.tier-pending {
+		--tier-accent: #888;
+		--tier-border: rgba(136, 136, 136, 0.25);
+		--tier-header-bg: rgba(136, 136, 136, 0.08);
+		--tier-label-color: #999;
+	}
+
+	.tier-done {
+		--tier-accent: #555;
+		--tier-border: rgba(85, 85, 85, 0.25);
+		--tier-header-bg: rgba(85, 85, 85, 0.08);
+		--tier-label-color: #777;
+	}
+
+	.tier-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 1rem;
+		background-color: var(--tier-header-bg);
+		border-bottom: 1px solid var(--tier-border);
+	}
+
+	.tier-label {
+		font-weight: bold;
+		font-size: 0.95rem;
+		color: var(--tier-label-color);
+	}
+
+	.tier-status {
+		font-size: 0.8rem;
+		font-weight: bold;
+		padding: 0.15rem 0.5rem;
+		border-radius: 3px;
+		color: var(--tier-label-color);
+		background-color: var(--tier-header-bg);
+	}
+
+	.tier-container .cards-container {
+		padding: 0.75rem;
 	}
 </style>
