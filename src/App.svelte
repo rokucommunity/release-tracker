@@ -12,8 +12,25 @@
 	/**
 	 * View mode: 'default' shows projects grouped by release line (original view),
 	 * 'release-flow' shows projects in dependency tiers within each release line.
+	 * Persisted via ?view= query param.
 	 */
-	let viewMode: 'default' | 'release-flow' = $state('default');
+	function getInitialViewMode(): 'default' | 'release-flow' {
+		const param = new URLSearchParams(window.location.search).get('view');
+		return param === 'release-flow' ? 'release-flow' : 'default';
+	}
+
+	function setViewMode(mode: 'default' | 'release-flow') {
+		viewMode = mode;
+		const url = new URL(window.location.href);
+		if (mode === 'default') {
+			url.searchParams.delete('view');
+		} else {
+			url.searchParams.set('view', mode);
+		}
+		window.history.replaceState({}, '', url.toString());
+	}
+
+	let viewMode: 'default' | 'release-flow' = $state(getInitialViewMode());
 
 	/**
 	 * Compute dependency tiers for projects within a release line.
@@ -527,9 +544,9 @@
 	<header class="navbar">
 		<h1>RokuCommunity Release Tracker</h1>
 		<div class="navbar-actions">
-			<div class="view-switch" on:click={() => viewMode = viewMode === 'default' ? 'release-flow' : 'default'} role="switch" aria-checked={viewMode === 'release-flow'}>
-				<span class="view-switch-option {viewMode === 'default' ? 'active' : ''}">Default</span>
-				<span class="view-switch-option {viewMode === 'release-flow' ? 'active' : ''}">Release Flow</span>
+			<div class="view-switch" on:click={() => setViewMode(viewMode === 'default' ? 'release-flow' : 'default')} role="switch" aria-checked={viewMode === 'release-flow'}>
+				<span class="view-switch-option view-switch-default {viewMode === 'default' ? 'active' : ''}">Default</span>
+				<span class="view-switch-option view-switch-flow {viewMode === 'release-flow' ? 'active' : ''}">Release Flow</span>
 			</div>
 			<a href="https://github.com/rokucommunity/release-tracker" title="View this project on GitHub" target="_blank">
 				<img src="github-mark-white.png" alt="GitHub" width="30" height="30" />
@@ -984,9 +1001,15 @@
 		transition: all 0.15s ease;
 	}
 
-	.view-switch-option.active {
-		background-color: rgba(255, 255, 255, 0.15);
-		color: rgb(240, 240, 240);
+	.view-switch-default.active {
+		background-color: rgba(100, 140, 180, 0.35);
+		color: #a8cef0;
+		font-weight: bold;
+	}
+
+	.view-switch-flow.active {
+		background-color: rgba(76, 175, 80, 0.3);
+		color: #81c784;
 		font-weight: bold;
 	}
 
