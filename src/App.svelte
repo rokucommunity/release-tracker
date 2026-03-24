@@ -33,6 +33,28 @@
 	let viewMode: 'default' | 'release-flow' = $state(getInitialViewMode());
 
 	/**
+	 * GitHub token for authenticated API requests (higher rate limits).
+	 * Stored in localStorage so it persists across sessions.
+	 */
+	let githubToken: string = $state(localStorage.getItem('github-token') ?? '');
+	let showTokenInput: boolean = $state(false);
+
+	function saveGithubToken(token: string) {
+		githubToken = token.trim();
+		if (githubToken) {
+			localStorage.setItem('github-token', githubToken);
+		} else {
+			localStorage.removeItem('github-token');
+		}
+		octokit = createOctokit(githubToken || undefined);
+	}
+
+	function signOut() {
+		saveGithubToken('');
+		showTokenInput = false;
+	}
+
+	/**
 	 * Compute dependency tiers for projects within a release line.
 	 * Tier 0 = no dependencies (or all deps are outside this release line)
 	 * Tier 1 = depends only on tier 0 projects
@@ -118,6 +140,10 @@
 	 * Check if all projects in prior tiers (for a given release line) are up to date,
 	 * meaning this tier is ready to release.
 	 */
+	function isProjectEffectivelyUpToDate(project: Project): boolean {
+		return project.ignored || !project.updateRequired;
+	}
+
 	function isTierReady(releaseLine: string, tierIndex: number, allTiers: { tier: number; projects: Project[] }[]): boolean {
 		// Tier 0 is always ready (no prior tiers)
 		if (tierIndex === 0) return true;
@@ -125,8 +151,8 @@
 		// Check all projects in tiers before this one
 		for (let i = 0; i < tierIndex; i++) {
 			for (const project of allTiers[i].projects) {
-				if (project.isLoading !== false) return false;
-				if (project.updateRequired) return false;
+				if (project.isLoading !== false && !project.ignored) return false;
+				if (!isProjectEffectivelyUpToDate(project)) return false;
 			}
 		}
 		return true;
@@ -134,19 +160,24 @@
 
 	function getTierStatus(releaseLine: string, tierIndex: number, allTiers: { tier: number; projects: Project[] }[]): 'ready' | 'blocked' | 'pending' | 'done' {
 		const tierProjects = allTiers[tierIndex].projects;
-		const anyLoading = tierProjects.some(p => p.isLoading !== false);
+		const anyLoading = tierProjects.some(p => p.isLoading !== false && !p.ignored);
 		if (anyLoading) return 'pending';
 
-		// If all projects in this tier are up to date, it's done
-		const allUpToDate = tierProjects.every(p => !p.updateRequired);
+		// If all projects in this tier are up to date (or ignored), it's done
+		const allUpToDate = tierProjects.every(p => isProjectEffectivelyUpToDate(p));
 		if (allUpToDate) return 'done';
 
 		// Check if prior tiers are all up to date
 		if (tierIndex === 0) return 'ready';
 		const priorReady = isTierReady(releaseLine, tierIndex, allTiers);
-		const anyPriorLoading = allTiers.slice(0, tierIndex).some(t => t.projects.some(p => p.isLoading !== false));
+		const anyPriorLoading = allTiers.slice(0, tierIndex).some(t => t.projects.some(p => p.isLoading !== false && !p.ignored));
 		if (anyPriorLoading) return 'pending';
 		return priorReady ? 'ready' : 'blocked';
+	}
+
+	function toggleIgnoreProject(project: Project) {
+		project.ignored = !project.ignored;
+		projects = projects;
 	}
 
 	function getTierStatusLabel(status: string): string {
@@ -186,24 +217,26 @@
 	let selectedProjectForUpdate: Project | undefined = $state();
 
 	const MyOctokit = Octokit.plugin(throttling);
-	const octokit = new MyOctokit({
-		// auth: 'token ' + process.env.TOKEN,
-		throttle: {
-			onRateLimit: (retryAfter, options) => {
-				octokit.log.warn(`Request quota exhausted for request ${options.method} ${options.url}`);
 
-				// Retry twice after hitting a rate limit error, then give up
-				if (options.request.retryCount <= 3) {
-					console.log(`Retrying after ${retryAfter} seconds!`);
-					return true;
+	function createOctokit(token?: string) {
+		return new MyOctokit({
+			...(token ? { auth: token } : {}),
+			throttle: {
+				onRateLimit: (retryAfter, options) => {
+					console.warn(`Request quota exhausted for request ${options.method} ${options.url}`);
+					if (options.request.retryCount <= 3) {
+						console.log(`Retrying after ${retryAfter} seconds!`);
+						return true;
+					}
+				},
+				onSecondaryRateLimit: (retryAfter, options, octokit) => {
+					octokit.log.warn(`Secondary quota detected for request ${options.method} ${options.url}`);
 				}
-			},
-			onSecondaryRateLimit: (retryAfter, options, octokit) => {
-				// does not retry, only logs a warning
-				octokit.log.warn(`Secondary quota detected for request ${options.method} ${options.url}`);
 			}
-		}
-	});
+		});
+	}
+
+	let octokit = createOctokit(githubToken || undefined);
 
 	async function hydrateProject(project: Project) {
 		project.isLoading = true;
@@ -413,13 +446,21 @@
 </script>
 
 {#snippet projectCard(project: Project)}
-	<div class="card {project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
-		<button
-			class="refresh-button"
-			title="click to refresh this project. doubleclick to refresh dependencies"
-			on:click={() => refreshProject(project, { refreshDependencies: false })}
-			on:dblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button
-		>
+	<div class="card {project.ignored ? 'ignored' : project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
+		<div class="card-actions">
+			{#if project.updateRequired && project.isLoading === false}
+				<button
+					class="ignore-button"
+					title={project.ignored ? 'Unignore this project' : 'Ignore this project for this session'}
+					on:click={() => toggleIgnoreProject(project)}
+				>{project.ignored ? '○' : '⊘'}</button>
+			{/if}
+			<button
+				class="refresh-button"
+				title="click to refresh this project. doubleclick to refresh dependencies"
+				on:click={() => refreshProject(project, { refreshDependencies: false })}
+				on:dblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button>
+		</div>
 		<h2 class="project-title">
 			<span class="status-icon"></span>
 			<a
@@ -548,6 +589,14 @@
 				<span class="view-switch-option view-switch-default {viewMode === 'default' ? 'active' : ''}">Default</span>
 				<span class="view-switch-option view-switch-flow {viewMode === 'release-flow' ? 'active' : ''}">Release Flow</span>
 			</div>
+			<div class="github-auth">
+				{#if githubToken}
+					<span class="auth-status auth-signed-in" title="Authenticated - higher rate limits">Signed in</span>
+					<button class="auth-button" on:click={() => signOut()}>Sign out</button>
+				{:else}
+					<button class="auth-button" on:click={() => showTokenInput = true} title="Sign in with a GitHub Personal Access Token for higher API rate limits">Sign in</button>
+				{/if}
+			</div>
 			<a href="https://github.com/rokucommunity/release-tracker" title="View this project on GitHub" target="_blank">
 				<img src="github-mark-white.png" alt="GitHub" width="30" height="30" />
 			</a>
@@ -589,6 +638,49 @@
 			</div>
 		{/each}
 	</div>
+	{#if showTokenInput}
+		<div class="modal-backdrop" on:click={() => showTokenInput = false}>
+			<div class="modal" on:click|stopPropagation>
+				<button class="modal-close" on:click={() => showTokenInput = false}>x</button>
+				<h2>Sign in with GitHub</h2>
+				<p>
+					A Personal Access Token (PAT) gives this app authenticated access to the GitHub API,
+					raising the rate limit from 60 to 5,000 requests per hour.
+				</p>
+				<p>Your token is stored only in your browser's localStorage and is never sent anywhere except to the GitHub API.</p>
+				<ol>
+					<li>
+						<a href="https://github.com/settings/tokens/new?description=RokuCommunity+Release+Tracker&scopes=public_repo" target="_blank">
+							Click here to create a new PAT on GitHub
+						</a>
+						(no scopes needed for public repos -- the defaults are fine)
+					</li>
+					<li>Copy the generated token</li>
+					<li>Paste it below and click Apply</li>
+				</ol>
+				<div class="modal-input-row">
+					<input
+						class="token-input"
+						type="password"
+						placeholder="ghp_xxxxxxxxxxxx"
+						on:keydown={(e) => {
+							if (e.key === 'Enter') {
+								saveGithubToken(e.currentTarget.value);
+								showTokenInput = false;
+							}
+						}}
+					/>
+					<button class="auth-button modal-apply" on:click={(e) => {
+						const input = e.currentTarget.parentElement?.querySelector('input');
+						if (input?.value) {
+							saveGithubToken(input.value);
+							showTokenInput = false;
+						}
+					}}>Apply</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 </main>
 
 <style>
@@ -1078,5 +1170,166 @@
 
 	.tier-container .cards-container {
 		padding: 0.75rem;
+	}
+
+	/* Ignore button */
+	.card-actions {
+		position: absolute;
+		top: 0.1rem;
+		right: 0.1rem;
+		display: flex;
+		gap: 0.1rem;
+	}
+
+	.card-actions .refresh-button {
+		position: static;
+	}
+
+	.ignore-button {
+		background-color: transparent;
+		border: none;
+		color: rgb(180, 180, 180);
+		cursor: pointer;
+		font-size: 1.1rem;
+		padding: 0 0.2rem;
+		line-height: 1;
+	}
+
+	.ignore-button:hover {
+		color: #fd7e14;
+	}
+
+	.ignored {
+		opacity: 0.45;
+	}
+
+	.ignored .status-icon {
+		background-color: #666;
+	}
+
+	.ignored .release-status-button {
+		background-color: rgba(0, 0, 0, 0.24) !important;
+		color: #888 !important;
+	}
+
+	/* GitHub auth */
+	.github-auth {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.auth-status {
+		font-size: 0.8rem;
+	}
+
+	.auth-signed-in {
+		color: #4caf50;
+	}
+
+	.auth-button {
+		background-color: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		color: rgb(217, 217, 217);
+		padding: 0.25rem 0.6rem;
+		border-radius: 4px;
+		font-size: 0.8rem;
+		cursor: pointer;
+	}
+
+	.auth-button:hover {
+		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.token-input {
+		background-color: rgba(0, 0, 0, 0.3);
+		border: 1px solid rgba(255, 255, 255, 0.25);
+		color: rgb(217, 217, 217);
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.8rem;
+		width: 180px;
+	}
+
+	.token-input:focus {
+		outline: none;
+		border-color: rgba(100, 140, 180, 0.6);
+	}
+
+	/* Modal */
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		background-color: rgba(0, 0, 0, 0.6);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 100;
+	}
+
+	.modal {
+		background-color: #1e2534;
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 8px;
+		padding: 1.5rem 2rem;
+		max-width: 480px;
+		width: 90%;
+		position: relative;
+		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+		color: rgb(217, 217, 217);
+	}
+
+	.modal h2 {
+		margin: 0 0 1rem;
+		font-size: 1.2rem;
+	}
+
+	.modal p {
+		font-size: 0.9rem;
+		line-height: 1.5;
+		margin: 0 0 0.75rem;
+		color: rgb(180, 180, 180);
+	}
+
+	.modal ol {
+		font-size: 0.9rem;
+		line-height: 1.6;
+		padding-left: 1.25rem;
+		margin: 0 0 1.25rem;
+		color: rgb(200, 200, 200);
+	}
+
+	.modal ol a {
+		color: rgb(158, 158, 255);
+	}
+
+	.modal-close {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.75rem;
+		background: none;
+		border: none;
+		color: rgb(180, 180, 180);
+		font-size: 1.1rem;
+		cursor: pointer;
+		padding: 0.2rem 0.4rem;
+	}
+
+	.modal-close:hover {
+		color: white;
+	}
+
+	.modal-input-row {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.modal-input-row .token-input {
+		flex: 1;
+		width: auto;
+	}
+
+	.modal-apply {
+		white-space: nowrap;
 	}
 </style>
