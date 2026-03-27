@@ -38,6 +38,7 @@
 	 */
 	let githubToken: string = $state(localStorage.getItem('github-token') ?? '');
 	let showTokenInput: boolean = $state(false);
+	let showUserMenu: boolean = $state(false);
 
 	function saveGithubToken(token: string) {
 		githubToken = token.trim();
@@ -583,23 +584,37 @@
 
 <main>
 	<header class="navbar">
-		<h1>RokuCommunity Release Tracker</h1>
+		<div class="navbar-left">
+			<a class="navbar-logo" href="https://github.com/rokucommunity/release-tracker" title="View this project on GitHub" target="_blank">
+				<img src="github-mark-white.png" alt="GitHub" width="28" height="28" />
+			</a>
+			<h1>RokuCommunity Release Tracker</h1>
+		</div>
 		<div class="navbar-actions">
 			<div class="view-switch" on:click={() => setViewMode(viewMode === 'default' ? 'release-flow' : 'default')} role="switch" aria-checked={viewMode === 'release-flow'}>
 				<span class="view-switch-option view-switch-default {viewMode === 'default' ? 'active' : ''}">Default</span>
 				<span class="view-switch-option view-switch-flow {viewMode === 'release-flow' ? 'active' : ''}">Release Flow</span>
 			</div>
-			<div class="github-auth">
-				{#if githubToken}
-					<span class="auth-status auth-signed-in" title="Authenticated - higher rate limits">Signed in</span>
-					<button class="auth-button" on:click={() => signOut()}>Sign out</button>
-				{:else}
-					<button class="auth-button" on:click={() => showTokenInput = true} title="Sign in with a GitHub Personal Access Token for higher API rate limits">Sign in</button>
+			<div class="user-menu-container">
+				<button class="user-menu-button {githubToken ? 'authenticated' : ''}" on:click={() => showUserMenu = !showUserMenu}>
+					<svg class="user-menu-avatar" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+						<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2a7.2 7.2 0 0 1-6-3.22c.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08a7.2 7.2 0 0 1-6 3.22z"/>
+					</svg>
+				</button>
+				{#if showUserMenu}
+					<div class="user-menu-backdrop" on:click={() => showUserMenu = false}></div>
+					<div class="user-menu">
+						{#if githubToken}
+							<div class="user-menu-status">Authenticated</div>
+							<button class="user-menu-item" on:click={() => { signOut(); showUserMenu = false; }}>Sign out</button>
+							<button class="user-menu-item" on:click={() => { showTokenInput = true; showUserMenu = false; }}>Change token</button>
+						{:else}
+							<div class="user-menu-status">Not signed in</div>
+							<button class="user-menu-item" on:click={() => { showTokenInput = true; showUserMenu = false; }}>Sign in</button>
+						{/if}
+					</div>
 				{/if}
 			</div>
-			<a href="https://github.com/rokucommunity/release-tracker" title="View this project on GitHub" target="_blank">
-				<img src="github-mark-white.png" alt="GitHub" width="30" height="30" />
-			</a>
 		</div>
 	</header>
 	<div class="content">
@@ -642,42 +657,50 @@
 		<div class="modal-backdrop" on:click={() => showTokenInput = false}>
 			<div class="modal" on:click|stopPropagation>
 				<button class="modal-close" on:click={() => showTokenInput = false}>x</button>
-				<h2>Sign in with GitHub</h2>
-				<p>
-					A Personal Access Token (PAT) gives this app authenticated access to the GitHub API,
-					raising the rate limit from 60 to 5,000 requests per hour.
-				</p>
-				<p>Your token is stored only in your browser's localStorage and is never sent anywhere except to the GitHub API.</p>
-				<ol>
-					<li>
-						<a href="https://github.com/settings/tokens/new?description=RokuCommunity+Release+Tracker&scopes=public_repo" target="_blank">
-							Click here to create a new PAT on GitHub
-						</a>
-						(no scopes needed for public repos -- the defaults are fine)
-					</li>
-					<li>Copy the generated token</li>
-					<li>Paste it below and click Apply</li>
-				</ol>
-				<div class="modal-input-row">
-					<input
-						class="token-input"
-						type="password"
-						placeholder="ghp_xxxxxxxxxxxx"
-						on:keydown={(e) => {
-							if (e.key === 'Enter') {
-								saveGithubToken(e.currentTarget.value);
+				{#if githubToken}
+					<h2>GitHub Authentication</h2>
+					<p>You're currently authenticated. API rate limit: 5,000 requests/hour.</p>
+					<div class="modal-actions">
+						<button class="auth-button modal-signout" on:click={() => { signOut(); showTokenInput = false; }}>Remove token</button>
+					</div>
+				{:else}
+					<h2>Sign in with GitHub</h2>
+					<p>
+						A Personal Access Token (PAT) gives this app authenticated access to the GitHub API,
+						raising the rate limit from 60 to 5,000 requests per hour.
+					</p>
+					<p>Your token is stored only in your browser's localStorage and is never sent anywhere except to the GitHub API.</p>
+					<ol>
+						<li>
+							<a href="https://github.com/settings/tokens/new?description=RokuCommunity+Release+Tracker&scopes=public_repo" target="_blank">
+								Click here to create a new PAT on GitHub
+							</a>
+							(no scopes needed for public repos -- the defaults are fine)
+						</li>
+						<li>Copy the generated token</li>
+						<li>Paste it below and click Apply</li>
+					</ol>
+					<div class="modal-input-row">
+						<input
+							class="token-input"
+							type="password"
+							placeholder="ghp_xxxxxxxxxxxx"
+							on:keydown={(e) => {
+								if (e.key === 'Enter') {
+									saveGithubToken(e.currentTarget.value);
+									showTokenInput = false;
+								}
+							}}
+						/>
+						<button class="auth-button modal-apply" on:click={(e) => {
+							const input = e.currentTarget.parentElement?.querySelector('input');
+							if (input?.value) {
+								saveGithubToken(input.value);
 								showTokenInput = false;
 							}
-						}}
-					/>
-					<button class="auth-button modal-apply" on:click={(e) => {
-						const input = e.currentTarget.parentElement?.querySelector('input');
-						if (input?.value) {
-							saveGithubToken(input.value);
-							showTokenInput = false;
-						}
-					}}>Apply</button>
-				</div>
+						}}>Apply</button>
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -1212,19 +1235,99 @@
 		color: #888 !important;
 	}
 
-	/* GitHub auth */
-	.github-auth {
+	/* Navbar layout */
+	.navbar-left {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.75rem;
 	}
 
-	.auth-status {
-		font-size: 0.8rem;
+	.navbar-logo {
+		display: flex;
+		align-items: center;
+		opacity: 0.85;
 	}
 
-	.auth-signed-in {
+	.navbar-logo:hover {
+		opacity: 1;
+	}
+
+	/* User menu */
+	.user-menu-container {
+		position: relative;
+	}
+
+	.user-menu-button {
+		background: none;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 50%;
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		padding: 0;
+		color: #999;
+		transition: color 0.15s, border-color 0.15s;
+	}
+
+	.user-menu-button:hover {
+		color: #ccc;
+		border-color: rgba(255, 255, 255, 0.35);
+	}
+
+	.user-menu-button.authenticated {
 		color: #4caf50;
+		border-color: rgba(76, 175, 80, 0.4);
+	}
+
+	.user-menu-button.authenticated:hover {
+		color: #66bb6a;
+		border-color: rgba(76, 175, 80, 0.6);
+	}
+
+	.user-menu-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 49;
+	}
+
+	.user-menu {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		background-color: #1e2534;
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 6px;
+		padding: 0.4rem 0;
+		min-width: 150px;
+		z-index: 50;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	}
+
+	.user-menu-status {
+		padding: 0.4rem 0.75rem;
+		font-size: 0.75rem;
+		color: #888;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		margin-bottom: 0.2rem;
+	}
+
+	.user-menu-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		background: none;
+		border: none;
+		color: rgb(217, 217, 217);
+		padding: 0.4rem 0.75rem;
+		font-size: 0.85rem;
+		cursor: pointer;
+	}
+
+	.user-menu-item:hover {
+		background-color: rgba(255, 255, 255, 0.08);
 	}
 
 	.auth-button {
@@ -1239,6 +1342,20 @@
 
 	.auth-button:hover {
 		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.modal-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.modal-signout {
+		border-color: rgba(220, 53, 69, 0.4);
+		color: #dc3545;
+	}
+
+	.modal-signout:hover {
+		background-color: rgba(220, 53, 69, 0.15);
 	}
 
 	.token-input {
