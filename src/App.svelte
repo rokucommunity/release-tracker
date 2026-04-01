@@ -176,8 +176,51 @@
 		return priorReady ? 'ready' : 'blocked';
 	}
 
-	function toggleIgnoreProject(project: Project) {
-		project.ignored = !project.ignored;
+
+	/**
+	 * Collect all transitive dependencies of a project within its release line.
+	 */
+	function getTransitiveDeps(project: Project, allProjects: Project[]): Set<Project> {
+		const result = new Set<Project>();
+		const queue = [project];
+		while (queue.length > 0) {
+			const current = queue.pop()!;
+			for (const dep of current.dependencies) {
+				const depProject = allProjects.find(p => p.name === dep.name && p.releaseLine.name === dep.releaseLine);
+				if (depProject && !result.has(depProject)) {
+					result.add(depProject);
+					queue.push(depProject);
+				}
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Toggle focus on a project: ignore all projects in previous tiers that are NOT transitive
+	 * dependencies of this project. If they're already ignored, un-ignore them.
+	 */
+	function focusProject(project: Project) {
+		const releaseLineProjects = projects.filter(p => p.releaseLine.name === project.releaseLine.name);
+		const tiers = computeTiers(releaseLineProjects, projects);
+		const projectTierIndex = tiers.findIndex(t => t.projects.includes(project));
+		if (projectTierIndex <= 0) return;
+
+		const deps = getTransitiveDeps(project, projects);
+
+		const nonDepsInPriorTiers: Project[] = [];
+		for (let i = 0; i < projectTierIndex; i++) {
+			for (const p of tiers[i].projects) {
+				if (!deps.has(p)) {
+					nonDepsInPriorTiers.push(p);
+				}
+			}
+		}
+
+		const anyIgnored = nonDepsInPriorTiers.some(p => p.ignored);
+		for (const p of nonDepsInPriorTiers) {
+			p.ignored = anyIgnored ? false : true;
+		}
 		projects = projects;
 	}
 
@@ -449,18 +492,25 @@
 {#snippet projectCard(project: Project)}
 	<div class="card {project.ignored ? 'ignored' : project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
 		<div class="card-actions">
-			{#if project.updateRequired && project.isLoading === false}
-				<button
-					class="ignore-button"
-					title={project.ignored ? 'Unignore this project' : 'Ignore this project for this session'}
-					on:click={() => toggleIgnoreProject(project)}
-				>{project.ignored ? '○' : '⊘'}</button>
-			{/if}
 			<button
 				class="refresh-button"
 				title="click to refresh this project. doubleclick to refresh dependencies"
 				on:click={() => refreshProject(project, { refreshDependencies: false })}
 				on:dblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button>
+			{#if computeTiers(projects.filter(p => p.releaseLine.name === project.releaseLine.name), projects).findIndex(t => t.projects.includes(project)) > 0}
+				<button
+					class="focus-button"
+					title="Ignore all projects in previous tiers that are not dependencies of this project"
+					on:click={() => focusProject(project)}
+				>📥</button>
+			{/if}
+			<input
+				class="include-checkbox"
+				type="checkbox"
+				title={project.ignored ? 'Include this project' : 'Exclude this project'}
+				checked={!project.ignored}
+				on:change={() => { project.ignored = !project.ignored; projects = projects; }}
+			/>
 		</div>
 		<h2 class="project-title">
 			<span class="status-icon"></span>
@@ -741,14 +791,17 @@
 	}
 
 	.refresh-button {
-		position: absolute;
-		top: 0.1rem;
-		right: 0.1rem;
 		background-color: transparent;
 		border: none;
-		color: rgb(217, 217, 217);
+		color: rgb(180, 180, 180);
 		cursor: pointer;
-		font-size: 1.25rem;
+		font-size: 1.1rem;
+		padding: 0;
+		line-height: 1;
+	}
+
+	.refresh-button:hover {
+		color: #fd7e14;
 	}
 
 	ul {
@@ -1198,29 +1251,35 @@
 	/* Ignore button */
 	.card-actions {
 		position: absolute;
-		top: 0.1rem;
-		right: 0.1rem;
+		top: 0.2rem;
+		right: 0.3rem;
 		display: flex;
-		gap: 0.1rem;
+		gap: 0.4rem;
+		align-items: center;
 	}
 
-	.card-actions .refresh-button {
-		position: static;
-	}
 
-	.ignore-button {
+	.focus-button {
 		background-color: transparent;
 		border: none;
 		color: rgb(180, 180, 180);
 		cursor: pointer;
-		font-size: 1.1rem;
-		padding: 0 0.2rem;
+		font-size: 0.9rem;
+		padding: 0;
 		line-height: 1;
 	}
 
-	.ignore-button:hover {
+	.focus-button:hover {
 		color: #fd7e14;
 	}
+
+	.include-checkbox {
+		cursor: pointer;
+		margin: 0;
+		width: 1rem;
+		height: 1rem;
+	}
+
 
 	.ignored {
 		opacity: 0.45;
