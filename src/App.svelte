@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Octokit } from '@octokit/rest';
+	import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 	import { throttling } from '@octokit/plugin-throttling';
 	import { type Project, getAllProjects } from './projects';
 	import { createClassFactory, sleep } from './util';
@@ -256,6 +256,51 @@
 	let collapsedReleaseLines: Record<string, boolean> = $state({});
 
 	/**
+	 * Tracks which dependency change panels are expanded. Key is `${projectName}::${depName}`.
+	 */
+	let expandedDependencyChanges: Record<string, boolean> = $state({});
+
+	/**
+	 * Caches fetched commits for dependency change panels. Key is `${depName}@v${from}...v${to}`.
+	 * Value is an array of commits, or `null` if currently loading.
+	 */
+	let dependencyChangesCache: Record<string, RestEndpointMethodTypes["repos"]["compareCommits"]["response"]['data']['commits'] | null> = $state({});
+
+	function getDependencyChangesKey(project: Project, dependency: { name: string }) {
+		return `${project.name}::${dependency.name}`;
+	}
+
+	function getDependencyCommitsCacheKey(dProject: Project, fromVersion: string, toVersion: string) {
+		return `${dProject.repository.owner}/${dProject.repository.repository}@v${fromVersion}...v${toVersion}`;
+	}
+
+	async function toggleDependencyChanges(project: Project, dependency: { name: string; releaseLine: string; versionFromLatestRelease?: string }) {
+		const panelKey = getDependencyChangesKey(project, dependency);
+		const dProject = findDependency(dependency);
+		expandedDependencyChanges[panelKey] = !expandedDependencyChanges[panelKey];
+
+		// Fetch commits if expanding and not yet cached
+		if (expandedDependencyChanges[panelKey] && dProject && dependency.versionFromLatestRelease && dProject.currentVersion) {
+			const cacheKey = getDependencyCommitsCacheKey(dProject, dependency.versionFromLatestRelease, dProject.currentVersion);
+			if (!(cacheKey in dependencyChangesCache)) {
+				dependencyChangesCache[cacheKey] = null; // mark as loading
+				try {
+					const response = await octokit.rest.repos.compareCommits({
+						owner: dProject.repository.owner,
+						repo: dProject.repository.repository,
+						base: `v${dependency.versionFromLatestRelease}`,
+						head: `v${dProject.currentVersion}`
+					});
+					dependencyChangesCache[cacheKey] = response.data.commits;
+				} catch (e) {
+					console.error(e);
+					dependencyChangesCache[cacheKey] = [];
+				}
+			}
+		}
+	}
+
+	/**
 	 * When clicking on a project's "update required" button, this is the project you clicked the button for.
 	 */
 	let selectedProjectForUpdate: Project | undefined = $state();
@@ -495,13 +540,13 @@
 			<button
 				class="refresh-button"
 				title="click to refresh this project. doubleclick to refresh dependencies"
-				on:click={() => refreshProject(project, { refreshDependencies: false })}
-				on:dblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button>
+				onclick={() => refreshProject(project, { refreshDependencies: false })}
+				ondblclick={() => refreshProject(project, { skipSelf: true })}>⟳</button>
 			{#if computeTiers(projects.filter(p => p.releaseLine.name === project.releaseLine.name), projects).findIndex(t => t.projects.includes(project)) > 0}
 				<button
 					class="focus-button"
 					title="Ignore all projects in previous tiers that are not dependencies of this project"
-					on:click={() => focusProject(project)}
+					onclick={() => focusProject(project)}
 				>📥</button>
 			{/if}
 			<input
@@ -509,7 +554,7 @@
 				type="checkbox"
 				title={project.ignored ? 'Include this project' : 'Exclude this project'}
 				checked={!project.ignored}
-				on:change={() => { project.ignored = !project.ignored; projects = projects; }}
+				onchange={() => { project.ignored = !project.ignored; projects = projects; }}
 			/>
 		</div>
 		<h2 class="project-title">
@@ -530,7 +575,7 @@
 			</span>
 			<a
 				class="button release-status-button"
-				on:click={() => toggleProjectUpdateActive(project)}
+				onclick={() => toggleProjectUpdateActive(project)}
 				target="_blank"
 				href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
 			>
@@ -543,10 +588,10 @@
 				{/if}
 				{#if project.updateRequired}
 					<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
-						<button class="button major" on:click={() => dispatchRelease(project)}>major</button>
-						<button class="button minor" on:click={() => dispatchRelease(project)}>minor</button>
-						<button class="button patch" on:click={() => dispatchRelease(project)}>patch</button>
-						<button class="button prerelease" on:click={() => dispatchRelease(project)}>prerelease</button>
+						<button class="button major" onclick={() => dispatchRelease(project)}>major</button>
+						<button class="button minor" onclick={() => dispatchRelease(project)}>minor</button>
+						<button class="button patch" onclick={() => dispatchRelease(project)}>patch</button>
+						<button class="button prerelease" onclick={() => dispatchRelease(project)}>prerelease</button>
 					</div>
 				{/if}
 			</a>
@@ -581,7 +626,7 @@
 					{/each}
 					{#if (project.unreleasedCommits?.length ?? 0) > MAX_COLLAPSED_COMMITS}
 						<li>
-							<button class="show-more faded" on:click={() => toggleProjectShowAllCommits(project)}
+							<button class="show-more faded" onclick={() => toggleProjectShowAllCommits(project)}
 								>...show {project?.showAllCommits ? 'less' : `${project.unreleasedCommits.length - commits.length} more`}</button
 							>
 						</li>
@@ -597,6 +642,10 @@
 				{#each project.dependencies as dependency}
 					{@const dProject = findDependency(dependency)!}
 					{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
+					{@const panelKey = getDependencyChangesKey(project, dependency)}
+					{@const isExpanded = expandedDependencyChanges[panelKey] ?? false}
+					{@const cacheKey = dProject && dependency.versionFromLatestRelease && dProject.currentVersion ? getDependencyCommitsCacheKey(dProject, dependency.versionFromLatestRelease, dProject.currentVersion) : null}
+					{@const depCommits = cacheKey ? dependencyChangesCache[cacheKey] : undefined}
 					<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 						<div class="dependency-container">
 							<a
@@ -621,7 +670,35 @@
 									href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
 									>{dProject?.currentVersion}</a
 								>{/if}
+							{#if dependencyVersionIsDifferent && dProject}
+								<button
+									class="dep-changes-toggle"
+									title={isExpanded ? 'Hide changes' : 'Show changes'}
+									onclick={() => toggleDependencyChanges(project, dependency)}
+								>{isExpanded ? '▲' : '▼'}</button>
+							{/if}
 						</div>
+						{#if dependencyVersionIsDifferent && dProject && isExpanded}
+							<div class="dep-changes-panel">
+								{#if depCommits === null}
+									<span class="faded"><i>Loading...</i></span>
+								{:else if depCommits === undefined}
+									<span class="faded"><i>Not fetched</i></span>
+								{:else if depCommits.length === 0}
+									<span class="faded"><i>No commits found</i></span>
+								{:else}
+									<ul class="dep-changes-list">
+										{#each depCommits as commit}
+											<li class={commit.commit.message.startsWith('chore') || commit.commit.message.startsWith('(chore)') ? 'commit-chore' : ''}>
+												<a class="commit-link" target="_blank" href={commit.html_url} title={commit.commit.message}>
+													{commit.commit.message}
+												</a>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</div>
+						{/if}
 					</li>
 				{/each}
 			{:else}
@@ -641,26 +718,26 @@
 			<h1>RokuCommunity Release Tracker</h1>
 		</div>
 		<div class="navbar-actions">
-			<div class="view-switch" on:click={() => setViewMode(viewMode === 'default' ? 'release-flow' : 'default')} role="switch" aria-checked={viewMode === 'release-flow'}>
+			<div class="view-switch" onclick={() => setViewMode(viewMode === 'default' ? 'release-flow' : 'default')} role="switch" aria-checked={viewMode === 'release-flow'}>
 				<span class="view-switch-option view-switch-default {viewMode === 'default' ? 'active' : ''}">Default</span>
 				<span class="view-switch-option view-switch-flow {viewMode === 'release-flow' ? 'active' : ''}">Release Flow</span>
 			</div>
 			<div class="user-menu-container">
-				<button class="user-menu-button {githubToken ? 'authenticated' : ''}" on:click={() => showUserMenu = !showUserMenu}>
+				<button class="user-menu-button {githubToken ? 'authenticated' : ''}" onclick={() => showUserMenu = !showUserMenu}>
 					<svg class="user-menu-avatar" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
 						<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2a7.2 7.2 0 0 1-6-3.22c.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08a7.2 7.2 0 0 1-6 3.22z"/>
 					</svg>
 				</button>
 				{#if showUserMenu}
-					<div class="user-menu-backdrop" on:click={() => showUserMenu = false}></div>
+					<div class="user-menu-backdrop" onclick={() => showUserMenu = false}></div>
 					<div class="user-menu">
 						{#if githubToken}
 							<div class="user-menu-status">Authenticated</div>
-							<button class="user-menu-item" on:click={() => { signOut(); showUserMenu = false; }}>Sign out</button>
-							<button class="user-menu-item" on:click={() => { showTokenInput = true; showUserMenu = false; }}>Change token</button>
+							<button class="user-menu-item" onclick={() => { signOut(); showUserMenu = false; }}>Sign out</button>
+							<button class="user-menu-item" onclick={() => { showTokenInput = true; showUserMenu = false; }}>Change token</button>
 						{:else}
 							<div class="user-menu-status">Not signed in</div>
-							<button class="user-menu-item" on:click={() => { showTokenInput = true; showUserMenu = false; }}>Sign in</button>
+							<button class="user-menu-item" onclick={() => { showTokenInput = true; showUserMenu = false; }}>Sign in</button>
 						{/if}
 					</div>
 				{/if}
@@ -670,7 +747,7 @@
 	<div class="content">
 		{#each releaseLines as releaseLine}
 			<div class="releaseline-container {getReleaseLineClass(releaseLine)} {collapsedReleaseLines[releaseLine] ? 'collapsed' : 'expanded'}">
-				<h2 class="releaseline-header" on:click={() => toggleReleaseLineCollapsed(releaseLine)}>{releaseLine}</h2>
+				<h2 class="releaseline-header" onclick={() => toggleReleaseLineCollapsed(releaseLine)}>{releaseLine}</h2>
 
 				{#if viewMode === 'default'}
 					<div class="cards-container">
@@ -698,20 +775,20 @@
 				{/if}
 
 				<div class="expand-button-container">
-					<i class="expand-button" on:click={() => toggleReleaseLineCollapsed(releaseLine)}>Show all projects</i>
+					<i class="expand-button" onclick={() => toggleReleaseLineCollapsed(releaseLine)}>Show all projects</i>
 				</div>
 			</div>
 		{/each}
 	</div>
 	{#if showTokenInput}
-		<div class="modal-backdrop" on:click={() => showTokenInput = false}>
-			<div class="modal" on:click|stopPropagation>
-				<button class="modal-close" on:click={() => showTokenInput = false}>x</button>
+		<div class="modal-backdrop" onclick={() => showTokenInput = false}>
+			<div class="modal" onclick={(e) => e.stopPropagation()}>
+				<button class="modal-close" onclick={() => showTokenInput = false}>x</button>
 				{#if githubToken}
 					<h2>GitHub Authentication</h2>
 					<p>You're currently authenticated. API rate limit: 5,000 requests/hour.</p>
 					<div class="modal-actions">
-						<button class="auth-button modal-signout" on:click={() => { signOut(); showTokenInput = false; }}>Remove token</button>
+						<button class="auth-button modal-signout" onclick={() => { signOut(); showTokenInput = false; }}>Remove token</button>
 					</div>
 				{:else}
 					<h2>Sign in with GitHub</h2>
@@ -735,14 +812,14 @@
 							class="token-input"
 							type="password"
 							placeholder="ghp_xxxxxxxxxxxx"
-							on:keydown={(e) => {
+							onkeydown={(e) => {
 								if (e.key === 'Enter') {
 									saveGithubToken(e.currentTarget.value);
 									showTokenInput = false;
 								}
 							}}
 						/>
-						<button class="auth-button modal-apply" on:click={(e) => {
+						<button class="auth-button modal-apply" onclick={(e) => {
 							const input = e.currentTarget.parentElement?.querySelector('input');
 							if (input?.value) {
 								saveGithubToken(input.value);
@@ -1114,7 +1191,7 @@
 	}
 
 	.dep-old::marker,
-	.dep-old a {
+	.dep-old > .dependency-container a {
 		color: #fd7e14 !important;
 	}
 
@@ -1138,6 +1215,43 @@
 	}
 	.dependency-end-version {
 		white-space: nowrap;
+	}
+
+	.dep-changes-toggle {
+		background: none;
+		border: none;
+		color: #fd7e14;
+		cursor: pointer;
+		font-size: 0.75rem;
+		padding: 4px 6px;
+		opacity: 0.6;
+		line-height: 1;
+	}
+	.dep-changes-toggle:hover {
+		opacity: 1;
+	}
+
+	.dep-changes-panel {
+		margin-top: 3px;
+		padding: 4px 6px;
+		border-left: 2px solid rgba(253, 126, 20, 0.4);
+		margin-left: 4px;
+		overflow: hidden;
+	}
+
+	.dep-changes-list {
+		list-style: disc;
+		padding-left: 1.2em;
+		margin: 0;
+	}
+
+	.dep-changes-panel li,
+	.dep-changes-panel li a {
+		color: rgb(217, 217, 217);
+	}
+
+	.dep-changes-panel .commit-link {
+		max-width: 100%;
 	}
 
 	.commits-not-fetched {
