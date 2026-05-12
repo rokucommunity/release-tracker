@@ -566,12 +566,18 @@
 			>
 		</h2>
 		<div class="version-row">
-			<span>
+			<span class="version-links">
 				<a
 					target="_blank"
 					href="https://github.com/{project?.repository.owner}/{project?.repository
 						?.repository}/releases/tag/v{project.currentVersion}"><i>v{project.currentVersion}</i></a
 				>
+				<a
+					class="npm-link"
+					target="_blank"
+					href="https://www.npmjs.com/package/{project.name}"
+					title="View {project.name} on npm"
+				>npm</a>
 			</span>
 			<a
 				class="button release-status-button"
@@ -1037,6 +1043,28 @@
 		align-items: center;
 		margin: 0;
 		padding: 0;
+	}
+
+	.version-links {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.npm-link {
+		font-size: 0.7rem;
+		font-weight: bold;
+		padding: 1px 5px;
+		border-radius: 3px;
+		background-color: #cb3837;
+		color: #fff !important;
+		text-decoration: none;
+		line-height: 1.4;
+	}
+
+	.npm-link:hover {
+		background-color: #a02d2c;
+		text-decoration: none !important;
 	}
 
 	.update-available {
