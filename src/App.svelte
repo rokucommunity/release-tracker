@@ -326,6 +326,27 @@
 	}
 
 	let octokit = createOctokit(githubToken || undefined);
+	const npmPackageExistsCache = new Map<string, Promise<boolean>>();
+
+	async function hasNpmPackagePage(packageName: string) {
+		const cached = npmPackageExistsCache.get(packageName);
+		if (cached) {
+			return await cached;
+		}
+
+		const checkPromise = (async () => {
+			try {
+				const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`);
+				return response.ok;
+			} catch (error) {
+				console.warn(`Failed to check npm package page for ${packageName}`, error);
+				return false;
+			}
+		})();
+
+		npmPackageExistsCache.set(packageName, checkPromise);
+		return await checkPromise;
+	}
 
 	async function hydrateProject(project: Project) {
 		project.isLoading = true;
@@ -336,6 +357,7 @@
 
 			//generate a random semver version
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+			project.hasNpmPage = true;
 			for (const dep of project.dependencies) {
 				dep.versionFromLatestRelease = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 			}
@@ -349,12 +371,16 @@
 
 		console.log(`${project.name} (${project.releaseLine.branch}): hydrating project`);
 
-		//fetch head package.json
-		const response = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine.branch}/package-lock.json`,
-			//prevent caching of this package.json since it could change at any time
-			cacheBusting: true
-		});
+		const [hasNpmPage, response] = await Promise.all([
+			hasNpmPackagePage(project.name),
+			//fetch head package.json
+			http.get({
+				url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine.branch}/package-lock.json`,
+				//prevent caching of this package.json since it could change at any time
+				cacheBusting: true
+			})
+		]);
+		project.hasNpmPage = hasNpmPage;
 		const packageLockJson = JSON.parse(response);
 		project.currentVersion = packageLockJson.version;
 		//now update the dependencies
@@ -572,16 +598,18 @@
 					href="https://github.com/{project?.repository.owner}/{project?.repository
 						?.repository}/releases/tag/v{project.currentVersion}"><i>v{project.currentVersion}</i></a
 				>
-				<a
-					class="npm-link"
-					target="_blank"
-					href="https://www.npmjs.com/package/{project.name}"
-					aria-label="View {project.name} on npm"
-				>
-					<svg viewBox="0 0 18 7" width="18" height="7" aria-hidden="true">
-						<path fill="currentColor" d="M0 0v7h5V2h4v5h9V0zM16 2h-2v3h2z" />
-					</svg>
-				</a>
+				{#if project.hasNpmPage}
+					<a
+						class="npm-link"
+						target="_blank"
+						href="https://www.npmjs.com/package/{project.name}"
+						aria-label="View {project.name} on npm"
+					>
+						<svg viewBox="0 0 18 7" width="18" height="7" aria-hidden="true">
+							<path fill="currentColor" d="M0 0v7h5V2h4v5h9V0zM16 2h-2v3h2z" />
+						</svg>
+					</a>
+				{/if}
 			</span>
 			<a
 				class="button release-status-button"

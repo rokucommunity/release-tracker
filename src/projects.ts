@@ -62,6 +62,11 @@ export interface Project {
   isLoading?: boolean;
 
   /**
+   * Whether this project has a corresponding npm package page.
+   */
+  hasNpmPage?: boolean;
+
+  /**
    * Should all commits be shown in the UI for this project? Or just up to the first `MAX_COLLAPSED_COMMITS`
    */
   showAllCommits?: boolean;
