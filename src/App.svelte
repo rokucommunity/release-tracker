@@ -336,8 +336,11 @@
 
 		const checkPromise = (async () => {
 			try {
-				const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`);
-				return response.ok;
+				await http.get({
+					url: `https://registry.npmjs.org/${encodeURIComponent(packageName)}`,
+					cacheInLocalStorage: true
+				});
+				return true;
 			} catch (error) {
 				console.warn(`Failed to check npm package page for ${packageName}`, error);
 				return false;
