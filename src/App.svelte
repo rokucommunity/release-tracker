@@ -576,8 +576,12 @@
 					class="npm-link"
 					target="_blank"
 					href="https://www.npmjs.com/package/{project.name}"
-					title="View {project.name} on npm"
-				>npm</a>
+					aria-label="View {project.name} on npm"
+				>
+					<svg viewBox="0 0 18 7" width="18" height="7" aria-hidden="true">
+						<path fill="currentColor" d="M0 0v7h5V2h4v5h9V0zM16 2h-2v3h2z" />
+					</svg>
+				</a>
 			</span>
 			<a
 				class="button release-status-button"
@@ -1051,20 +1055,25 @@
 		gap: 0.4rem;
 	}
 
-	.npm-link {
-		font-size: 0.7rem;
-		font-weight: bold;
-		padding: 1px 5px;
+	.version-links .npm-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 3px 5px;
 		border-radius: 3px;
 		background-color: #cb3837;
-		color: #fff !important;
+		color: #fff;
 		text-decoration: none;
-		line-height: 1.4;
+		line-height: 1;
 	}
 
-	.npm-link:hover {
+	.version-links .npm-link svg {
+		display: block;
+	}
+
+	.version-links .npm-link:hover {
 		background-color: #a02d2c;
-		text-decoration: none !important;
+		text-decoration: none;
 	}
 
 	.update-available {
