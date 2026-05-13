@@ -608,8 +608,15 @@
 						href="https://www.npmjs.com/package/{project.name}"
 						aria-label="View {project.name} on npm"
 					>
-						<svg viewBox="0 0 18 7" width="18" height="7" aria-hidden="true">
-							<path fill="currentColor" d="M0 0v7h5V2h4v5h9V0zM16 2h-2v3h2z" />
+						<svg viewBox="0 0 128 128" width="18" height="18" aria-hidden="true">
+							<path
+								fill="#cb3837"
+								d="m0 7.0624c0-3.8376 3.2248-7.0624 7.0624-7.0624h113.88c3.8376 0 7.0624 3.2248 7.0624 7.0624v113.88c0 3.8376-3.2248 7.0624-7.0624 7.0624h-113.88c-3.8376 0-7.0624-3.2248-7.0624-7.0624zm23.69 97.518h40.395l0.04975-58.532h19.494l-0.04975 58.581h19.543l0.0508-78.075-78.076-0.0995-0.0995 78.125z"
+							/>
+							<path
+								fill="#fff"
+								d="m25.105 65.52v-39.008h15.855c8.7201 0 26.274 0.03373 39.008 0.07496l23.153 0.07496v77.866h-19.476v-58.54h-19.588v58.54h-38.952z"
+							/>
 						</svg>
 					</a>
 				{/if}
@@ -1090,10 +1097,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		padding: 3px 5px;
-		border-radius: 3px;
-		background-color: #cb3837;
-		color: #fff;
+		color: #cb3837;
 		text-decoration: none;
 		line-height: 1;
 	}
@@ -1103,7 +1107,7 @@
 	}
 
 	.version-links .npm-link:hover {
-		background-color: #a02d2c;
+		color: #a02d2c;
 		text-decoration: none;
 	}
 
