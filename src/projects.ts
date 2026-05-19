@@ -62,9 +62,14 @@ export interface Project {
   isLoading?: boolean;
 
   /**
-   * Whether this project has a corresponding npm package page.
+   * What kind of artifact this project publishes. Drives which external store link is shown on the card.
    */
-  hasNpmPage?: boolean;
+  projectType: 'npm' | 'vscode-extension';
+
+  /**
+   * If `projectType` is `vscode-extension`, this is the `publisher.extension` id on the VS Code marketplace.
+   */
+  vscodeExtensionId?: string;
 
   /**
    * Should all commits be shown in the UI for this project? Or just up to the first `MAX_COLLAPSED_COMMITS`
@@ -86,6 +91,7 @@ export function getAllProjects(): Project[] {
   return [
     {
       name: 'roku-deploy',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'roku-deploy'
@@ -98,6 +104,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/logger',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'logger'
@@ -110,6 +117,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/bslib',
+      projectType: 'npm',
       hide: true,
       repository: {
         owner: 'rokucommunity',
@@ -123,6 +131,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'brighterscript',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'brighterscript'
@@ -148,6 +157,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'roku-debug',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'roku-debug'
@@ -173,6 +183,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'brighterscript-formatter',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'brighterscript-formatter'
@@ -190,6 +201,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/bslint',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'bslint'
@@ -207,6 +219,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/brs',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'brs'
@@ -219,6 +232,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'ropm',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'ropm'
@@ -240,6 +254,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'roku-report-analyzer',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'roku-report-analyzer'
@@ -261,6 +276,8 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'vscode-brightscript-language',
+      projectType: 'vscode-extension',
+      vscodeExtensionId: 'RokuCommunity.brightscript',
       repository: {
         owner: 'rokucommunity',
         repository: 'vscode-brightscript-language'
@@ -294,6 +311,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'roku-promise',
+      projectType: 'npm',
       hide: true,
       repository: {
         owner: 'rokucommunity',
@@ -312,6 +330,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/promises',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'promises'
@@ -333,6 +352,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'rooibos-roku',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'rooibos'
@@ -354,6 +374,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'bsc-plugin-auto-findnode',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'bsc-plugin-auto-findnode'
@@ -371,6 +392,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/sgRouter',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'sgRouter'
@@ -392,6 +414,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'bsc-plugin-inline-annotation',
+      projectType: 'npm',
       hide: true,
       repository: {
         owner: 'rokucommunity',
@@ -410,6 +433,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'brighterscript',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'brighterscript'
@@ -435,6 +459,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: '@rokucommunity/bslint',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'bslint'
@@ -452,6 +477,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'bsc-plugin-auto-findnode',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'bsc-plugin-auto-findnode'
@@ -469,6 +495,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'rooibos-roku',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'rooibos'
@@ -494,6 +521,7 @@ export function getAllProjects(): Project[] {
     },
     {
       name: 'roku-deploy',
+      projectType: 'npm',
       repository: {
         owner: 'rokucommunity',
         repository: 'roku-deploy'
