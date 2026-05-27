@@ -85,6 +85,13 @@ export interface Project {
    * Temporarily ignored for this session (treated as up-to-date for tier readiness)
    */
   ignored?: boolean;
+
+  /**
+   * Conclusion of the latest `security-audit.yml` workflow run on this card's release-line branch.
+   * Parsed out of the shields.io badge response (no GitHub API calls).
+   * `unknown` covers "no status", missing workflow, missing repo, and parse failures.
+   */
+  ciStatus?: 'success' | 'failure' | 'pending' | 'unknown';
 }
 
 export function getAllProjects(): Project[] {
