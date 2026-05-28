@@ -25,7 +25,7 @@ export default defineConfig({
     }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'github-mark-white.png', 'apple-touch-icon-180x180.png'],
+      pwaAssets: { config: true },
       manifest: {
         name: 'RokuCommunity Release Tracker',
         short_name: 'Release Tracker',
