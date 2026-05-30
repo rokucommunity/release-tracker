@@ -48,15 +48,24 @@
 	/**
 	 * View mode: 'default' shows projects grouped by release line (original view),
 	 * 'release-flow' shows projects in dependency tiers within each release line.
-	 * Persisted via ?view= query param.
+	 * Persisted via localStorage and URL query param (URL takes precedence for sharing).
 	 */
 	function getInitialViewMode(): 'default' | 'release-flow' {
+		// Check URL parameter first (for sharing links)
 		const param = new URLSearchParams(window.location.search).get('view');
-		return param === 'release-flow' ? 'release-flow' : 'default';
+		if (param === 'release-flow' || param === 'default') {
+			return param;
+		}
+		// Fall back to localStorage for persistence between visits
+		const stored = localStorage.getItem('view-mode');
+		return stored === 'release-flow' ? 'release-flow' : 'default';
 	}
 
 	function setViewMode(mode: 'default' | 'release-flow') {
 		viewMode = mode;
+		// Save to localStorage for persistence
+		localStorage.setItem('view-mode', mode);
+		// Also update URL for sharing
 		const url = new URL(window.location.href);
 		if (mode === 'default') {
 			url.searchParams.delete('view');
