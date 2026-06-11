@@ -7,20 +7,65 @@
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
+	const SECURITY_AUDIT_WORKFLOW = 'security-audit.yml';
+
+	function getSecurityAuditRunsUrl(project: Project): string {
+		const branch = encodeURIComponent(project.releaseLine.branch);
+		return `https://github.com/${project.repository.owner}/${project.repository.repository}/actions/workflows/${SECURITY_AUDIT_WORKFLOW}?query=branch%3A${branch}`;
+	}
+
+	/**
+	 * Map a shields.io badge's right-side text to a status bucket. Anything we don't recognize
+	 * (including "no status", "repo or workflow not found", missing repo) falls through to 'unknown'.
+	 */
+	function classifyShieldsMessage(svgText: string): Project['ciStatus'] {
+		if (svgText.includes('>passing<')) return 'success';
+		if (svgText.includes('>failing<')) return 'failure';
+		if (svgText.includes('>in progress<') || svgText.includes('>queued<') || svgText.includes('>starting<') || svgText.includes('>waiting<')) return 'pending';
+		return 'unknown';
+	}
+
+	/**
+	 * Resolve the CI status for the project's security-audit workflow on its release-line branch
+	 * by reading the shields.io badge SVG. Same network cost as rendering the badge image directly,
+	 * but lets us drop the status text and treat 404-style responses as 'unknown' instead of red.
+	 */
+	async function fetchCiStatus(project: Project): Promise<Project['ciStatus']> {
+		const branch = encodeURIComponent(project.releaseLine.branch);
+		const url = `https://img.shields.io/github/actions/workflow/status/${project.repository.owner}/${project.repository.repository}/${SECURITY_AUDIT_WORKFLOW}?branch=${branch}`;
+		try {
+			const response = await fetch(url);
+			if (!response.ok) return 'unknown';
+			return classifyShieldsMessage(await response.text());
+		} catch (e) {
+			console.error(`${project.name}: failed to fetch CI status`, e);
+			return 'unknown';
+		}
+	}
+
 	let projects = $state(getAllProjects().filter((x) => x.hide !== true));
 
 	/**
 	 * View mode: 'default' shows projects grouped by release line (original view),
 	 * 'release-flow' shows projects in dependency tiers within each release line.
-	 * Persisted via ?view= query param.
+	 * Persisted via localStorage and URL query param (URL takes precedence for sharing).
 	 */
 	function getInitialViewMode(): 'default' | 'release-flow' {
+		// Check URL parameter first (for sharing links)
 		const param = new URLSearchParams(window.location.search).get('view');
-		return param === 'release-flow' ? 'release-flow' : 'default';
+		if (param === 'release-flow' || param === 'default') {
+			return param;
+		}
+		// Fall back to localStorage for persistence between visits
+		const stored = localStorage.getItem('view-mode');
+		return stored === 'release-flow' ? 'release-flow' : 'default';
 	}
 
 	function setViewMode(mode: 'default' | 'release-flow') {
 		viewMode = mode;
+		// Save to localStorage for persistence
+		localStorage.setItem('view-mode', mode);
+		// Also update URL for sharing
 		const url = new URL(window.location.href);
 		if (mode === 'default') {
 			url.searchParams.delete('view');
@@ -372,6 +417,7 @@
 		const tagPackageLockJson = JSON.parse(tagResponse);
 
 		project.unreleasedCommits = await fetchUnreleasedCommits(project);
+		project.ciStatus = await fetchCiStatus(project);
 
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
@@ -605,6 +651,18 @@
 						</svg>
 					</a>
 				{/if}
+				<a
+					class="status-badge status-badge-{project.ciStatus ?? 'unknown'}"
+					target="_blank"
+					href={getSecurityAuditRunsUrl(project)}
+					title={`Security audit on ${project.releaseLine.branch} (${project.ciStatus ?? 'unknown'})`}
+					aria-label={`Security audit on ${project.releaseLine.branch}: ${project.ciStatus ?? 'unknown'}`}
+				>
+					<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+						<rect x="3" y="8" width="10" height="7" rx="1" fill="white" />
+						<path d="M5 8V5a3 3 0 0 1 6 0v3" fill="none" stroke="white" stroke-width="2" />
+					</svg>
+				</a>
 			</span>
 			<a
 				class="button release-status-button"
@@ -1076,7 +1134,30 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
+		flex-wrap: wrap;
 	}
+
+	.status-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 18px;
+		border-radius: 3px;
+		background-color: #9f9f9f;
+		line-height: 1;
+		text-decoration: none;
+	}
+
+	.status-badge:hover {
+		text-decoration: none;
+		filter: brightness(1.1);
+	}
+
+	.status-badge-success { background-color: #4c1; }
+	.status-badge-failure { background-color: #e05d44; }
+	.status-badge-pending { background-color: #dfb317; }
+	.status-badge-unknown { background-color: #9f9f9f; }
 
 	.version-links .npm-link {
 		display: inline-flex;
