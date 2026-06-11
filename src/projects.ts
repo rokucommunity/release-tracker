@@ -181,6 +181,28 @@ export function getAllProjects(): Project[] {
         }
       ]
     },
+     {
+      name: 'roku-test-automation',
+      projectType: 'npm',
+      repository: {
+        owner: 'rokucommunity',
+        repository: 'roku-test-automation'
+      },
+      releaseLine: {
+        name: 'mainline',
+        branch: 'master',
+      },
+      dependencies: [
+        {
+          name: 'brighterscript',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'roku-deploy',
+          releaseLine: 'mainline'
+        }
+      ]
+    },
     {
       name: 'brighterscript-formatter',
       projectType: 'npm',
