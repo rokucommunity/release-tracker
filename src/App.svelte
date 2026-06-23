@@ -405,7 +405,22 @@
 
 	const getReleaseLineClass = createClassFactory(['releaseline1', 'releaseline2', 'releaseline3', 'releaseline4', 'releaseline5']);
 
-	let collapsedReleaseLines: Record<string, boolean> = $state({});
+	const COLLAPSED_RELEASE_LINES_KEY = 'collapsed-release-lines';
+
+	/**
+	 * Load the persisted collapsed/expanded state of each release line from localStorage so the user's
+	 * choices survive page refreshes.
+	 */
+	function getInitialCollapsedReleaseLines(): Record<string, boolean> {
+		try {
+			const stored = localStorage.getItem(COLLAPSED_RELEASE_LINES_KEY);
+			return stored ? JSON.parse(stored) : {};
+		} catch {
+			return {};
+		}
+	}
+
+	let collapsedReleaseLines: Record<string, boolean> = $state(getInitialCollapsedReleaseLines());
 
 	/**
 	 * Tracks which dependency change panels are expanded. Key is `${projectName}::${depName}`.
@@ -658,8 +673,31 @@
 	}
 
 	function toggleReleaseLineCollapsed(releaseLine: string) {
-		collapsedReleaseLines[releaseLine] = !collapsedReleaseLines[releaseLine];
-		collapsedReleaseLines = collapsedReleaseLines;
+		//build a fresh object (rather than mutating in place) so the `$state` proxy reliably re-renders,
+		//and so only this single release line's flag changes
+		const nowCollapsed = !collapsedReleaseLines[releaseLine];
+		collapsedReleaseLines = { ...collapsedReleaseLines, [releaseLine]: nowCollapsed };
+		//persist so the user's expand/collapse choices survive a refresh
+		localStorage.setItem(COLLAPSED_RELEASE_LINES_KEY, JSON.stringify(collapsedReleaseLines));
+		//a release line that was just expanded may contain projects we skipped hydrating; fetch them now
+		if (!nowCollapsed) {
+			hydrateCollapsedReleaseLine(releaseLine);
+		}
+	}
+
+	/**
+	 * Hydrate any not-yet-loaded projects in a release line that was just expanded. Projects in
+	 * collapsed release lines are skipped during the initial load to save network requests, so we
+	 * lazily fetch them the first time the user opens that line.
+	 */
+	async function hydrateCollapsedReleaseLine(releaseLine: string) {
+		let handledProjects: Project[] = [];
+		for (const project of projects.filter((x) => x.releaseLine.name === releaseLine)) {
+			//only hydrate projects that haven't been loaded yet
+			if (project.currentVersion === undefined && project.isLoading !== true) {
+				refreshProject(project, { handledProjects: handledProjects });
+			}
+		}
 	}
 
 	/**
@@ -717,6 +755,11 @@
 	async function hydrateProjects() {
 		let handledProjects: Project[] = [];
 		for (const project of projects) {
+			//skip projects in collapsed release lines to save network requests; they'll be hydrated
+			//lazily when the user expands that release line
+			if (collapsedReleaseLines[project.releaseLine.name]) {
+				continue;
+			}
 			refreshProject(project, { handledProjects: handledProjects });
 		}
 	}
@@ -1534,8 +1577,9 @@
 		margin-bottom: 20px;
 	}
 
-	.collapsed .cards-container {
-		height: 0;
+	.collapsed .cards-container,
+	.collapsed .tier-container {
+		display: none;
 	}
 
 	.card {
