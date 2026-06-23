@@ -372,9 +372,45 @@
 
 	let octokit = createOctokit(githubToken || undefined);
 
+	/**
+	 * Fetch and parse a project's `package-lock.json` from the given git ref. Tries each of the project's
+	 * `packageLockLocations` (defaulting to `package-lock.json` at the repo root) in order, returning the
+	 * first one that resolves to a valid file. Throws if none of the locations yield a file.
+	 */
+	async function fetchPackageLockJson(project: Project, ref: string, options: { cacheBusting?: true; cacheInLocalStorage?: boolean }) {
+		const locations = project.packageLockLocations ?? ['package-lock.json'];
+		let lastError: unknown;
+		for (const location of locations) {
+			try {
+				const response = await http.get({
+					url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/${ref}/${location}`,
+					...options
+				});
+				return JSON.parse(response);
+			} catch (e) {
+				lastError = e;
+			}
+		}
+		throw new Error(
+			`${project.name} (${project.releaseLine.branch}): could not find a package-lock.json at ${ref} in any of [${locations.join(', ')}]`,
+			{ cause: lastError }
+		);
+	}
+
 	async function hydrateProject(project: Project) {
 		project.isLoading = true;
+		project.loadFailed = false;
+		try {
+			await hydrateProjectInner(project);
+		} catch (e) {
+			console.error(`${project.name} (${project.releaseLine.branch}): hydration failed`, e);
+			project.loadFailed = true;
+		} finally {
+			project.isLoading = false;
+		}
+	}
 
+	async function hydrateProjectInner(project: Project) {
 		//temporarily generate dummy data for testing purposes instead of hitting the API
 		if (enableTestMode) {
 			await sleep(Math.random() * 1000);
@@ -386,7 +422,6 @@
 			}
 			project.currentVersion = `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
 
-			project.isLoading = false;
 			return;
 		}
 
@@ -394,12 +429,10 @@
 
 		console.log(`${project.name} (${project.releaseLine.branch}): hydrating project`);
 
-		const response = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/${project.releaseLine.branch}/package-lock.json`,
+		const packageLockJson = await fetchPackageLockJson(project, `refs/heads/${project.releaseLine.branch}`, {
 			//prevent caching of this package.json since it could change at any time
 			cacheBusting: true
 		});
-		const packageLockJson = JSON.parse(response);
 		project.currentVersion = packageLockJson.version;
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
@@ -407,14 +440,12 @@
 		}
 
 		//fetch most recent release package-lock.json
-		const tagResponse = await http.get({
-			url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/tags/v${packageLockJson.version}/package-lock.json`,
+		const tagPackageLockJson = await fetchPackageLockJson(project, `refs/tags/v${packageLockJson.version}`, {
 			//when making a request, prevent it from being cached by the browser
 			cacheBusting: true,
 			//this request can be cached since files from tag refs should never change
 			cacheInLocalStorage: true
 		});
-		const tagPackageLockJson = JSON.parse(tagResponse);
 
 		project.unreleasedCommits = await fetchUnreleasedCommits(project);
 		project.ciStatus = await fetchCiStatus(project);
@@ -425,8 +456,6 @@
 		}
 
 		//fetch the latest patch file
-
-		project.isLoading = false;
 	}
 
 	/**
@@ -536,6 +565,8 @@
 		handledProjects.push(project);
 
 		project.isLoading = true;
+		//clear any prior failed state so a refresh shows the loading indicator instead of the stale failure
+		project.loadFailed = false;
 
 		projects = projects;
 
@@ -580,7 +611,7 @@
 </script>
 
 {#snippet projectCard(project: Project)}
-	<div class="card {project.ignored ? 'ignored' : project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
+	<div class="card {project.ignored ? 'ignored' : project.loadFailed ? 'failed' : project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
 		<div class="card-actions">
 			<button
 				class="refresh-button"
@@ -670,7 +701,9 @@
 				target="_blank"
 				href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
 			>
-				{#if project.isLoading !== false}
+				{#if project.loadFailed}
+					Load failed
+				{:else if project.isLoading !== false}
 					pending
 				{:else if project.updateRequired}
 					Start release
@@ -1026,6 +1059,12 @@
 		color: green !important;
 	}
 
+	.failed .release-status-button {
+		background-color: rgba(220, 53, 69, 0.2) !important;
+		color: #dc3545 !important;
+		cursor: default;
+	}
+
 	.update-available .release-status-button {
 		background-color: #fd7e14 !important;
 		color: white;
@@ -1271,6 +1310,11 @@
 	.loading .status-icon {
 		background-color: grey;
 		animation: pulse-opacity 1.2s infinite;
+	}
+
+	.failed .status-icon {
+		background-color: #dc3545;
+		border: 2px solid #dc3545;
 	}
 
 	@keyframes pulse-opacity {

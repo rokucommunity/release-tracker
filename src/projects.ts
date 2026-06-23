@@ -62,6 +62,20 @@ export interface Project {
   isLoading?: boolean;
 
   /**
+   * Did hydration fail (e.g. we couldn't find/fetch a `package-lock.json`)? When set, the card shows a
+   * failed state instead of spinning on the loading indicator forever.
+   */
+  loadFailed?: boolean;
+
+  /**
+   * Relative paths (from the repo root) where the `package-lock.json` file might live, tried in order.
+   * The first location that yields a valid file wins. Defaults to `['package-lock.json']` when not specified.
+   * Only projects whose lock file is not at the repo root (or whose location varies between branches/tags)
+   * need to specify this.
+   */
+  packageLockLocations?: string[];
+
+  /**
    * What kind of artifact this project publishes. Drives which external store link is shown on the card.
    */
   projectType: 'npm' | 'vscode-extension';
@@ -199,6 +213,8 @@ export function getAllProjects(): Project[] {
         name: 'mainline',
         branch: 'master',
       },
+      //v2 keeps its lock file under ./client, v3 (master) moved it to the repo root. Try root first, then ./client.
+      packageLockLocations: ['package-lock.json', 'client/package-lock.json'],
       dependencies: [
         {
           name: 'brighterscript',
