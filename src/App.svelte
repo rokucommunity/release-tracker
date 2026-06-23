@@ -4,6 +4,7 @@
 	import { type Project, getAllProjects } from './projects';
 	import { createClassFactory, sleep } from './util';
 	import { http } from './http';
+	import * as localforage from 'localforage';
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
@@ -41,6 +42,112 @@
 			console.error(`${project.name}: failed to fetch CI status`, e);
 			return 'unknown';
 		}
+	}
+
+	/** How long (ms) to trust a cached "list open release PRs" API result before we'd spend another API call. */
+	const RELEASE_PR_API_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+	/**
+	 * Generate the set of plausible next-version strings for a release that's currently `currentVersion`.
+	 * This is intentionally LOSSY: it covers the common patch/minor/major bumps and their `-alpha.0`/`-beta.0`
+	 * prerelease starts. Anything fancier (e.g. `-alpha.3`) is left to the API fallback. We only use these to
+	 * probe `release/<version>` branches via raw.githubusercontent (zero GitHub API quota cost).
+	 */
+	function guessNextVersions(currentVersion: string): string[] {
+		const match = /^(\d+)\.(\d+)\.(\d+)/.exec(currentVersion);
+		if (!match) return [];
+		const major = Number(match[1]);
+		const minor = Number(match[2]);
+		const patch = Number(match[3]);
+		const bumps = [
+			`${major}.${minor}.${patch + 1}`, // patch
+			`${major}.${minor + 1}.0`, // minor
+			`${major + 1}.0.0` // major
+		];
+		const guesses: string[] = [];
+		for (const bump of bumps) {
+			guesses.push(bump, `${bump}-alpha.0`, `${bump}-beta.0`);
+		}
+		return guesses;
+	}
+
+	/**
+	 * Cheap, zero-API-quota probe: does a `release/<version>` branch exist for any of our guessed next versions?
+	 * Hits raw.githubusercontent (the same network class as the package-lock fetches), so refreshing the page
+	 * doesn't burn GitHub API rate limit. Returns the first matching version, or undefined if none are found.
+	 */
+	async function probeReleaseBranches(project: Project): Promise<string | undefined> {
+		const guesses = guessNextVersions(project.currentVersion ?? '');
+		const results = await Promise.all(
+			guesses.map(async (version) => {
+				try {
+					await http.get({
+						url: `https://raw.githubusercontent.com/${project.repository.owner}/${project.repository.repository}/refs/heads/release/${version}/package.json`,
+						cacheBusting: true
+					});
+					return version;
+				} catch {
+					return undefined;
+				}
+			})
+		);
+		return results.find((x) => x !== undefined);
+	}
+
+	/**
+	 * Authoritative-but-costly fallback: list the repo's open PRs once and find one whose title or head branch
+	 * looks like a release (a bare semver title, or a `release/<version>` head ref). Costs one GitHub API
+	 * request, so the result is cached in localforage with a TTL to keep page refreshes from re-spending quota.
+	 */
+	async function findReleasePrViaApi(project: Project): Promise<Project['releaseInProgress'] | undefined> {
+		const cacheKey = `release-pr: ${project.repository.owner}/${project.repository.repository}`;
+		try {
+			const cached = await localforage.getItem<{ at: number; value: Project['releaseInProgress'] | null }>(cacheKey);
+			if (cached && Date.now() - cached.at < RELEASE_PR_API_CACHE_TTL) {
+				return cached.value ?? undefined;
+			}
+
+			const response = await octokit.rest.pulls.list({
+				owner: project.repository.owner,
+				repo: project.repository.repository,
+				state: 'open',
+				per_page: 100
+			});
+
+			const semver = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+			let found: Project['releaseInProgress'] | undefined;
+			for (const pr of response.data) {
+				const branchVersion = /^release\/(.+)$/.exec(pr.head.ref)?.[1];
+				const titleVersion = semver.test(pr.title.trim()) ? pr.title.trim().replace(/^v/, '') : undefined;
+				const version = titleVersion ?? (branchVersion && semver.test(branchVersion) ? branchVersion.replace(/^v/, '') : undefined);
+				if (version) {
+					found = { version, url: pr.html_url, prNumber: pr.number };
+					break;
+				}
+			}
+
+			await localforage.setItem(cacheKey, { at: Date.now(), value: found ?? null });
+			return found;
+		} catch (e) {
+			console.error(`${project.name}: failed to look up release PR`, e);
+			return undefined;
+		}
+	}
+
+	/**
+	 * Determine whether a release is already in progress for this project, preferring the zero-quota raw probe
+	 * and only falling back to the (cached) GitHub API when the probe finds nothing. Should only be called for
+	 * projects that plausibly need a release, to avoid spending requests on up-to-date projects.
+	 */
+	async function fetchReleaseInProgress(project: Project): Promise<Project['releaseInProgress'] | undefined> {
+		const probedVersion = await probeReleaseBranches(project);
+		if (probedVersion) {
+			return {
+				version: probedVersion,
+				url: `https://github.com/${project.repository.owner}/${project.repository.repository}/tree/release/${probedVersion}`
+			};
+		}
+		return findReleasePrViaApi(project);
 	}
 
 	let projects = $state(getAllProjects().filter((x) => x.hide !== true));
@@ -455,7 +562,15 @@
 			dependency.versionFromLatestRelease = tagPackageLockJson?.packages?.[`node_modules/${dependency.name}`]?.version;
 		}
 
-		//fetch the latest patch file
+		//if this project has unreleased (non-chore) commits, check whether a release is already in progress.
+		//this is gated so we only spend probe/API requests on projects that plausibly need a release.
+		project.releaseInProgress = undefined;
+		const hasReleasableCommits = (project.unreleasedCommits ?? []).some(
+			(x) => !x.commit.message.startsWith('(chore)') && !x.commit.message.startsWith('chore')
+		);
+		if (hasReleasableCommits) {
+			project.releaseInProgress = await fetchReleaseInProgress(project);
+		}
 	}
 
 	/**
@@ -611,7 +726,7 @@
 </script>
 
 {#snippet projectCard(project: Project)}
-	<div class="card {project.ignored ? 'ignored' : project.loadFailed ? 'failed' : project.isLoading !== false ? 'loading' : project.updateRequired ? 'update-available' : 'no-updates'}">
+	<div class="card {project.ignored ? 'ignored' : project.loadFailed ? 'failed' : project.isLoading !== false ? 'loading' : project.releaseInProgress ? 'release-in-progress' : project.updateRequired ? 'update-available' : 'no-updates'}">
 		<div class="card-actions">
 			<button
 				class="refresh-button"
@@ -699,18 +814,25 @@
 				class="button release-status-button"
 				onclick={() => toggleProjectUpdateActive(project)}
 				target="_blank"
-				href={`https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
+				title={project.releaseInProgress
+					? `A release for v${project.releaseInProgress.version} is already open — no need to start a new one. Click to view it.`
+					: undefined}
+				href={project.releaseInProgress
+					? project.releaseInProgress.url
+					: `https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
 			>
 				{#if project.loadFailed}
 					Load failed
 				{:else if project.isLoading !== false}
 					pending
+				{:else if project.releaseInProgress}
+					View open release{project.releaseInProgress.prNumber ? ` #${project.releaseInProgress.prNumber}` : ''} →
 				{:else if project.updateRequired}
 					Start release
 				{:else}
 					Up to date
 				{/if}
-				{#if project.updateRequired}
+				{#if project.updateRequired && !project.releaseInProgress}
 					<div class="update-actions {selectedProjectForUpdate === project ? '' : 'hidden'}">
 						<button class="button major" onclick={() => dispatchRelease(project)}>major</button>
 						<button class="button minor" onclick={() => dispatchRelease(project)}>minor</button>
@@ -720,6 +842,18 @@
 				{/if}
 			</a>
 		</div>
+
+		<!-- release-in-progress banner: tell the user a release is already open so they don't start a new one -->
+		{#if project.releaseInProgress}
+			<a class="release-in-progress-banner" href={project.releaseInProgress.url} target="_blank">
+				<span class="release-in-progress-icon" aria-hidden="true">🚀</span>
+				<span class="release-in-progress-text">
+					Release <b>v{project.releaseInProgress.version}</b> already in progress{project.releaseInProgress.prNumber
+						? ` (PR #${project.releaseInProgress.prNumber})`
+						: ''} — no need to start a new one.
+				</span>
+			</a>
+		{/if}
 
 		<!-- unreleased commits-->
 		<div class="unreleased-commits">
@@ -1070,6 +1204,40 @@
 		color: white;
 	}
 
+	.release-in-progress .release-status-button {
+		background-color: #6f42c1 !important;
+		color: white;
+	}
+
+	.release-in-progress-banner {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 8px 0;
+		padding: 8px 10px;
+		border: 1px solid #6f42c1;
+		border-left: 4px solid #6f42c1;
+		border-radius: 4px;
+		background-color: rgba(111, 66, 193, 0.12);
+		color: inherit;
+		text-decoration: none;
+		font-size: 0.85rem;
+		line-height: 1.3;
+	}
+
+	.release-in-progress-banner:hover {
+		background-color: rgba(111, 66, 193, 0.22);
+	}
+
+	.release-in-progress-icon {
+		flex: 0 0 auto;
+		font-size: 1.1rem;
+	}
+
+	.release-in-progress-text b {
+		color: #b794f6;
+	}
+
 	.update-available .update-actions {
 		background-color: #3d5369;
 		border: 1px solid #717171;
@@ -1305,6 +1473,11 @@
 
 	.no-updates .status-icon {
 		background-color: green;
+	}
+
+	.release-in-progress .status-icon {
+		background-color: #6f42c1;
+		border: 2px solid #6f42c1;
 	}
 
 	.loading .status-icon {

@@ -68,6 +68,20 @@ export interface Project {
   loadFailed?: boolean;
 
   /**
+   * Set when we detect that a release is already in progress for this project (i.e. there's an open
+   * `release/<version>` branch / PR whose name is the target version). Lets the card show an
+   * "in progress" badge instead of nudging the user to start a release that's already underway.
+   */
+  releaseInProgress?: {
+    /** The release version (e.g. `3.0.0-alpha.0`) parsed from the release branch/PR name */
+    version: string;
+    /** Link to the release PR (when known via the API) or the release branch (when found by raw probe) */
+    url: string;
+    /** The release PR number, when we resolved it via the GitHub API */
+    prNumber?: number;
+  };
+
+  /**
    * Relative paths (from the repo root) where the `package-lock.json` file might live, tried in order.
    * The first location that yields a valid file wins. Defaults to `['package-lock.json']` when not specified.
    * Only projects whose lock file is not at the repo root (or whose location varies between branches/tags)
