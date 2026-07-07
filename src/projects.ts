@@ -216,7 +216,7 @@ export function getAllProjects(): Project[] {
         }
       ]
     },
-     {
+    {
       name: 'roku-test-automation',
       projectType: 'npm',
       repository: {
@@ -364,6 +364,10 @@ export function getAllProjects(): Project[] {
         },
         {
           name: '@rokucommunity/logger',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'roku-test-automation',
           releaseLine: 'mainline'
         }
       ]
