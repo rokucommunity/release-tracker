@@ -125,19 +125,6 @@ export interface Project {
 export function getAllProjects(): Project[] {
   return [
     {
-      name: 'roku-deploy',
-      projectType: 'npm',
-      repository: {
-        owner: 'rokucommunity',
-        repository: 'roku-deploy'
-      },
-      releaseLine: {
-        name: 'mainline',
-        branch: 'master',
-      },
-      dependencies: []
-    },
-    {
       name: '@rokucommunity/logger',
       projectType: 'npm',
       repository: {
@@ -149,6 +136,24 @@ export function getAllProjects(): Project[] {
         branch: 'master',
       },
       dependencies: []
+    },
+    {
+      name: 'roku-deploy',
+      projectType: 'npm',
+      repository: {
+        owner: 'rokucommunity',
+        repository: 'roku-deploy'
+      },
+      releaseLine: {
+        name: 'mainline',
+        branch: 'master',
+      },
+      dependencies: [
+        {
+          name: '@rokucommunity/logger',
+          releaseLine: 'mainline'
+        }
+      ]
     },
     {
       name: '@rokucommunity/bslib',
