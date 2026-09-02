@@ -437,6 +437,10 @@ export function getAllProjects(): Project[] {
         {
           name: 'roku-deploy',
           releaseLine: 'mainline'
+        },
+        {
+          name: 'roku-debug',
+          releaseLine: 'mainline'
         }
       ]
     },
