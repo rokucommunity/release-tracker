@@ -5,6 +5,7 @@
 	import { createClassFactory, resolveTargetDependencyVersion, sleep } from './util';
 	import { http } from './http';
 	import * as localforage from 'localforage';
+	import * as semver from 'semver';
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
@@ -525,20 +526,32 @@
 		);
 	}
 
+	/** How long (ms) to trust a cached npm version list. Published versions are append-only, so this is cheap to cache. */
+	const NPM_VERSIONS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
 	/**
-	 * In-flight/settled cache of npm version lists, keyed by package name. The registry's abbreviated
-	 * metadata document is large-ish, so only fetch it once per package per page load and only for the
-	 * packages that actually need it (dependencies sitting on a prerelease line).
+	 * De-dupes concurrent/repeat calls within a page load, so the registry is hit at most once per package
+	 * even though the resolve pass runs after every project hydration.
 	 */
 	const npmVersionsCache: Record<string, Promise<string[] | undefined>> = {};
 
 	/**
-	 * Fetch every published version of an npm package. Uses the registry's abbreviated metadata document,
-	 * which is a plain CORS-enabled GET and costs no GitHub API quota. Returns undefined on failure so
+	 * Fetch every published version of an npm package. This is a plain CORS GET against the registry's
+	 * abbreviated metadata document -- it does NOT touch the GitHub API, so it costs no GitHub rate limit.
+	 * Results are cached in localStorage for `NPM_VERSIONS_CACHE_TTL`. Returns undefined on failure so
 	 * callers can fall back rather than fail hydration.
 	 */
 	function fetchNpmVersions(packageName: string): Promise<string[] | undefined> {
 		return (npmVersionsCache[packageName] ??= (async () => {
+			const cacheKey = `npm-versions: ${packageName}`;
+			try {
+				const cached = await localforage.getItem<{ versions: string[]; fetchedAt: number }>(cacheKey);
+				if (cached && Date.now() - cached.fetchedAt < NPM_VERSIONS_CACHE_TTL) {
+					return cached.versions;
+				}
+			} catch (e) {
+				console.warn(`Failed to read cached npm versions for ${packageName}`, e);
+			}
 			try {
 				const response = await fetch(`https://registry.npmjs.org/${packageName.replace('/', '%2F')}`, {
 					headers: { Accept: 'application/vnd.npm.install-v1+json' }
@@ -546,7 +559,9 @@
 				if (!response.ok) {
 					throw new Error(`HTTP error! status: ${response.status}`);
 				}
-				return Object.keys((await response.json())?.versions ?? {});
+				const versions = Object.keys((await response.json())?.versions ?? {});
+				await localforage.setItem(cacheKey, { versions, fetchedAt: Date.now() });
+				return versions;
 			} catch (e) {
 				console.error(`Failed to fetch npm versions for ${packageName}`, e);
 				return undefined;
@@ -663,21 +678,27 @@
 	 * depend on a prerelease that's ahead of that tip (i.e. `roku-deploy@4.0.0-alpha.5` vs a `3.18.4` tip).
 	 */
 	async function resolveDependencyTargetVersions(project: Project) {
+		//the npm version list is only needed to resolve a prerelease dependency, so most projects can be
+		//resolved synchronously without touching the network at all
+		const needsNpmVersions = (dep: Project['dependencies'][0]) =>
+			!!dep.versionFromLatestRelease && semver.prerelease(dep.versionFromLatestRelease) !== null;
+
+		const resolve = (dep: Project['dependencies'][0], availableDependencyVersions?: string[]) => {
+			dep.targetVersion = resolveTargetDependencyVersion({
+				projectVersion: project.currentVersion,
+				currentDependencyVersion: dep.versionFromLatestRelease,
+				latestDependencyVersion: findDependency(dep)?.currentVersion,
+				availableDependencyVersions
+			});
+		};
+
+		for (const dep of project.dependencies.filter((x) => !needsNpmVersions(x))) {
+			resolve(dep);
+		}
 		await Promise.all(
-			project.dependencies.map(async (dep) => {
-				const dProject = findDependency(dep);
-				//the npm version list is only needed to resolve prerelease dependencies, so don't pay for it otherwise
-				const availableDependencyVersions =
-					dep.versionFromLatestRelease && /-/.test(dep.versionFromLatestRelease)
-						? await fetchNpmVersions(dep.name)
-						: undefined;
-				dep.targetVersion = resolveTargetDependencyVersion({
-					projectVersion: project.currentVersion,
-					currentDependencyVersion: dep.versionFromLatestRelease,
-					latestDependencyVersion: dProject?.currentVersion,
-					availableDependencyVersions
-				});
-			})
+			project.dependencies
+				.filter(needsNpmVersions)
+				.map(async (dep) => resolve(dep, await fetchNpmVersions(dep.name)))
 		);
 	}
 
