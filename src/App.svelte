@@ -526,11 +526,14 @@
 	}
 
 	/**
-	 * De-dupes calls within a single refresh, so the registry is hit at most once per package even though
-	 * the resolve pass runs after every project hydration. Cleared at the start of each refresh -- a newly
-	 * published version is exactly what we're watching for, so every refresh re-asks the registry.
+	 * De-dupes version-list fetches within a single refresh, so the registry is hit at most once per package
+	 * even though the resolve pass runs after every project hydration.
+	 *
+	 * Keyed by refresh so a newly published version is always visible: each refresh starts with an empty map
+	 * and re-asks the registry. Deliberately not a module-level cache -- concurrent refreshes (page load plus
+	 * a refresh-button click) each get their own, rather than one clobbering the other's in-flight promises.
 	 */
-	let npmVersionsCache: Record<string, Promise<string[] | undefined>> = {};
+	type NpmVersionsCache = Record<string, Promise<string[] | undefined>>;
 
 	/**
 	 * Versions we have previously seen published, per package. Safe to persist forever and never needs
@@ -574,11 +577,11 @@
 	 * Does this exact version exist on npm? Answered from cache when we've already seen it published,
 	 * otherwise by asking the registry. A cache miss never short-circuits to `false`.
 	 */
-	async function npmVersionExists(packageName: string, version: string): Promise<boolean> {
+	async function npmVersionExists(cache: NpmVersionsCache, packageName: string, version: string): Promise<boolean> {
 		if (knownPublishedVersions[packageName]?.has(version)) {
 			return true;
 		}
-		return (await fetchNpmVersions(packageName))?.includes(version) ?? false;
+		return (await fetchNpmVersions(cache, packageName))?.includes(version) ?? false;
 	}
 
 	/**
@@ -587,8 +590,8 @@
 	 * Cache-busted so a version published seconds ago is visible immediately. Returns undefined on failure
 	 * so callers can fall back rather than fail hydration.
 	 */
-	function fetchNpmVersions(packageName: string): Promise<string[] | undefined> {
-		return (npmVersionsCache[packageName] ??= (async () => {
+	function fetchNpmVersions(cache: NpmVersionsCache, packageName: string): Promise<string[] | undefined> {
+		return (cache[packageName] ??= (async () => {
 			try {
 				const response = await fetch(
 					`https://registry.npmjs.org/${packageName.replace('/', '%2F')}?nocache=${Date.now()}`,
@@ -718,7 +721,7 @@
 	 * than blindly showing the tip of the dependency's release line — which reads as a downgrade whenever we
 	 * depend on a prerelease that's ahead of that tip (i.e. `roku-deploy@4.0.0-alpha.5` vs a `3.18.4` tip).
 	 */
-	async function resolveDependencyTargetVersions(project: Project) {
+	async function resolveDependencyTargetVersions(project: Project, npmVersionsCache: NpmVersionsCache) {
 		await Promise.all(
 			project.dependencies.map(async (dep) => {
 				//ask for the cheapest lookup that can answer this dependency's question
@@ -729,9 +732,12 @@
 					latestDependencyVersion: findDependency(dep)?.currentVersion,
 					//a yes/no about one immutable version, so a previously-seen 'yes' avoids the request
 					lockstepVersionExists:
-						lookup.kind === 'exists' ? await npmVersionExists(dep.name, lookup.lockstepVersion!) : undefined,
+						lookup.kind === 'exists'
+							? await npmVersionExists(npmVersionsCache, dep.name, lookup.lockstepVersion!)
+							: undefined,
 					//"newest on this line" changes the moment something is published, so this must be live
-					availableDependencyVersions: lookup.kind === 'list' ? await fetchNpmVersions(dep.name) : undefined
+					availableDependencyVersions:
+						lookup.kind === 'list' ? await fetchNpmVersions(npmVersionsCache, dep.name) : undefined
 				});
 			})
 		);
@@ -740,8 +746,11 @@
 	function computeProjectNeedsUpdate(project: Project) {
 		// Compute whether an update is required
 		const hasOutdatedDependencies = !project.dependencies.every((dep) => {
-			//no target version resolved means we have nothing to compare against, so don't claim it's outdated
-			return !dep.targetVersion || dep.targetVersion === dep.versionFromLatestRelease;
+			//compare against the version we'd actually bump to. Fall back to the tip of the dependency's
+			//release line when no target has resolved yet (i.e. the dependency hasn't hydrated), which keeps
+			//the original behavior of treating an unknown dependency version as "not outdated".
+			const targetVersion = dep.targetVersion ?? findDependency(dep)?.currentVersion;
+			return !targetVersion || targetVersion === dep.versionFromLatestRelease;
 		});
 		//projects who don't yet have their commits fetched will always be marked as needing an update
 		const unreleasedFilteredCommits =
@@ -809,10 +818,11 @@
 	 */
 	async function hydrateCollapsedReleaseLine(releaseLine: string) {
 		let handledProjects: Project[] = [];
+		let npmVersionsCache: NpmVersionsCache = {};
 		for (const project of projects.filter((x) => x.releaseLine.name === releaseLine)) {
 			//only hydrate projects that haven't been loaded yet
 			if (project.currentVersion === undefined && project.isLoading !== true) {
-				refreshProject(project, { handledProjects: handledProjects });
+				refreshProject(project, { handledProjects: handledProjects, npmVersionsCache: npmVersionsCache });
 			}
 		}
 	}
@@ -822,16 +832,17 @@
 	 */
 	async function refreshProject(
 		project: Project,
-		options?: { refreshDependencies?: boolean; handledProjects?: Project[]; skipSelf?: boolean }
+		options?: {
+			refreshDependencies?: boolean;
+			handledProjects?: Project[];
+			skipSelf?: boolean;
+			/** Shared for the duration of one refresh (see `NpmVersionsCache`); a new refresh starts empty. */
+			npmVersionsCache?: NpmVersionsCache;
+		}
 	) {
 		const handledProjects = options?.handledProjects ?? [];
 		const refreshDependencies = options?.refreshDependencies ?? true;
-
-		//this is the start of a new refresh (rather than a recursive call into a dependency), so drop any
-		//npm version lists we fetched previously -- a refresh must always see versions published since.
-		if (options?.handledProjects === undefined) {
-			npmVersionsCache = {};
-		}
+		const npmVersionsCache = options?.npmVersionsCache ?? {};
 
 		//if we have already refreshed this project, don't do it again
 		if (handledProjects.includes(project)) {
@@ -856,7 +867,11 @@
 
 				//if we aren't actively reloading this project, reload it now
 				if (dProject) {
-					await refreshProject(dProject, { refreshDependencies: refreshDependencies, handledProjects: handledProjects });
+					await refreshProject(dProject, {
+						refreshDependencies: refreshDependencies,
+						handledProjects: handledProjects,
+						npmVersionsCache: npmVersionsCache
+					});
 				}
 			}
 		}
@@ -867,7 +882,7 @@
 		}
 
 		//do another pass to ensure all projects are up to date
-		await Promise.all(projects.map((x) => resolveDependencyTargetVersions(x)));
+		await Promise.all(projects.map((x) => resolveDependencyTargetVersions(x, npmVersionsCache)));
 		for (const project of projects) {
 			computeProjectNeedsUpdate(project);
 		}
@@ -880,13 +895,14 @@
 		//load the known-published-versions cache first so hydration can skip existence checks it already knows
 		await loadKnownPublishedVersions();
 		let handledProjects: Project[] = [];
+		let npmVersionsCache: NpmVersionsCache = {};
 		for (const project of projects) {
 			//skip projects in collapsed release lines to save network requests; they'll be hydrated
 			//lazily when the user expands that release line
 			if (collapsedReleaseLines[project.releaseLine.name]) {
 				continue;
 			}
-			refreshProject(project, { handledProjects: handledProjects });
+			refreshProject(project, { handledProjects: handledProjects, npmVersionsCache: npmVersionsCache });
 		}
 	}
 
