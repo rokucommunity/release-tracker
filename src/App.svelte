@@ -2,7 +2,7 @@
 	import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 	import { throttling } from '@octokit/plugin-throttling';
 	import { type Project, getAllProjects } from './projects';
-	import { createClassFactory, sleep } from './util';
+	import { createClassFactory, resolveTargetDependencyVersion, sleep } from './util';
 	import { http } from './http';
 	import * as localforage from 'localforage';
 
@@ -441,14 +441,20 @@
 		return `${dProject.repository.owner}/${dProject.repository.repository}@v${fromVersion}...v${toVersion}`;
 	}
 
-	async function toggleDependencyChanges(project: Project, dependency: { name: string; releaseLine: string; versionFromLatestRelease?: string }) {
+	async function toggleDependencyChanges(
+		project: Project,
+		dependency: { name: string; releaseLine: string; versionFromLatestRelease?: string; targetVersion?: string }
+	) {
 		const panelKey = getDependencyChangesKey(project, dependency);
 		const dProject = findDependency(dependency);
 		expandedDependencyChanges[panelKey] = !expandedDependencyChanges[panelKey];
 
+		//the changes we care about are the ones between what we depend on now and what we'd bump to
+		const targetVersion = dependency.targetVersion ?? dProject?.currentVersion;
+
 		// Fetch commits if expanding and not yet cached
-		if (expandedDependencyChanges[panelKey] && dProject && dependency.versionFromLatestRelease && dProject.currentVersion) {
-			const cacheKey = getDependencyCommitsCacheKey(dProject, dependency.versionFromLatestRelease, dProject.currentVersion);
+		if (expandedDependencyChanges[panelKey] && dProject && dependency.versionFromLatestRelease && targetVersion) {
+			const cacheKey = getDependencyCommitsCacheKey(dProject, dependency.versionFromLatestRelease, targetVersion);
 			if (!(cacheKey in dependencyChangesCache)) {
 				dependencyChangesCache[cacheKey] = null; // mark as loading
 				try {
@@ -456,7 +462,7 @@
 						owner: dProject.repository.owner,
 						repo: dProject.repository.repository,
 						base: `v${dependency.versionFromLatestRelease}`,
-						head: `v${dProject.currentVersion}`
+						head: `v${targetVersion}`
 					});
 					dependencyChangesCache[cacheKey] = response.data.commits;
 				} catch (e) {
@@ -517,6 +523,35 @@
 			`${project.name} (${project.releaseLine.branch}): could not find a package-lock.json at ${ref} in any of [${locations.join(', ')}]`,
 			{ cause: lastError }
 		);
+	}
+
+	/**
+	 * In-flight/settled cache of npm version lists, keyed by package name. The registry's abbreviated
+	 * metadata document is large-ish, so only fetch it once per package per page load and only for the
+	 * packages that actually need it (dependencies sitting on a prerelease line).
+	 */
+	const npmVersionsCache: Record<string, Promise<string[] | undefined>> = {};
+
+	/**
+	 * Fetch every published version of an npm package. Uses the registry's abbreviated metadata document,
+	 * which is a plain CORS-enabled GET and costs no GitHub API quota. Returns undefined on failure so
+	 * callers can fall back rather than fail hydration.
+	 */
+	function fetchNpmVersions(packageName: string): Promise<string[] | undefined> {
+		return (npmVersionsCache[packageName] ??= (async () => {
+			try {
+				const response = await fetch(`https://registry.npmjs.org/${packageName.replace('/', '%2F')}`, {
+					headers: { Accept: 'application/vnd.npm.install-v1+json' }
+				});
+				if (!response.ok) {
+					throw new Error(`HTTP error! status: ${response.status}`);
+				}
+				return Object.keys((await response.json())?.versions ?? {});
+			} catch (e) {
+				console.error(`Failed to fetch npm versions for ${packageName}`, e);
+				return undefined;
+			}
+		})());
 	}
 
 	async function hydrateProject(project: Project) {
@@ -620,11 +655,37 @@
 		}
 	}
 
+	/**
+	 * Work out, for each of this project's dependencies, which version that dependency would actually be
+	 * bumped to on the next release, and store it as `dep.targetVersion`. This is the same decision the
+	 * release workflow makes (see `resolveTargetDependencyVersion`), so the card shows the real bump rather
+	 * than blindly showing the tip of the dependency's release line — which reads as a downgrade whenever we
+	 * depend on a prerelease that's ahead of that tip (i.e. `roku-deploy@4.0.0-alpha.5` vs a `3.18.4` tip).
+	 */
+	async function resolveDependencyTargetVersions(project: Project) {
+		await Promise.all(
+			project.dependencies.map(async (dep) => {
+				const dProject = findDependency(dep);
+				//the npm version list is only needed to resolve prerelease dependencies, so don't pay for it otherwise
+				const availableDependencyVersions =
+					dep.versionFromLatestRelease && /-/.test(dep.versionFromLatestRelease)
+						? await fetchNpmVersions(dep.name)
+						: undefined;
+				dep.targetVersion = resolveTargetDependencyVersion({
+					projectVersion: project.currentVersion,
+					currentDependencyVersion: dep.versionFromLatestRelease,
+					latestDependencyVersion: dProject?.currentVersion,
+					availableDependencyVersions
+				});
+			})
+		);
+	}
+
 	function computeProjectNeedsUpdate(project: Project) {
 		// Compute whether an update is required
 		const hasOutdatedDependencies = !project.dependencies.every((dep) => {
-			const dProject = projects.find((x) => x.name === dep.name && x.releaseLine.name === dep.releaseLine);
-			return !dProject?.currentVersion || dProject.currentVersion === dep.versionFromLatestRelease;
+			//no target version resolved means we have nothing to compare against, so don't claim it's outdated
+			return !dep.targetVersion || dep.targetVersion === dep.versionFromLatestRelease;
 		});
 		//projects who don't yet have their commits fetched will always be marked as needing an update
 		const unreleasedFilteredCommits =
@@ -744,6 +805,7 @@
 		}
 
 		//do another pass to ensure all projects are up to date
+		await Promise.all(projects.map((x) => resolveDependencyTargetVersions(x)));
 		for (const project of projects) {
 			computeProjectNeedsUpdate(project);
 		}
@@ -942,10 +1004,11 @@
 			{#if project.dependencies.length > 0}
 				{#each project.dependencies as dependency}
 					{@const dProject = findDependency(dependency)!}
-					{@const dependencyVersionIsDifferent = dProject?.currentVersion !== dependency?.versionFromLatestRelease}
+					{@const targetVersion = dependency.targetVersion ?? dProject?.currentVersion}
+					{@const dependencyVersionIsDifferent = !!targetVersion && targetVersion !== dependency?.versionFromLatestRelease}
 					{@const panelKey = getDependencyChangesKey(project, dependency)}
 					{@const isExpanded = expandedDependencyChanges[panelKey] ?? false}
-					{@const cacheKey = dProject && dependency.versionFromLatestRelease && dProject.currentVersion ? getDependencyCommitsCacheKey(dProject, dependency.versionFromLatestRelease, dProject.currentVersion) : null}
+					{@const cacheKey = dProject && dependency.versionFromLatestRelease && targetVersion ? getDependencyCommitsCacheKey(dProject, dependency.versionFromLatestRelease, targetVersion) : null}
 					{@const depCommits = cacheKey ? dependencyChangesCache[cacheKey] : undefined}
 					<li class={[{ 'dep-old': dependencyVersionIsDifferent }]}>
 						<div class="dependency-container">
@@ -959,17 +1022,17 @@
 							</a>@{#if dependencyVersionIsDifferent}<a
 									class="dependency-version-link"
 									target="_blank"
-									href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${dProject.releaseLine.branch}`}
+									href={`https://github.com/${dProject.repository.owner}/${dProject.repository.repository}/compare/v${dependency.versionFromLatestRelease}...${targetVersion === dProject.currentVersion ? dProject.releaseLine.branch : `v${targetVersion}`}`}
 								>
 									<span class="dependency-start-version">{dependency?.versionFromLatestRelease}&nbsp;⇒&nbsp;</span><span
-										class="dependency-end-version {dependency.versionFromTipOfReleaseLine === dProject.currentVersion
+										class="dependency-end-version {dependency.versionFromTipOfReleaseLine === targetVersion
 											? 'dep-is-ready'
-											: ''}">{dProject?.currentVersion}</span
+											: ''}">{targetVersion}</span
 									>
 								</a>{:else}<a
 									target="_blank"
-									href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${dProject?.currentVersion}`}
-									>{dProject?.currentVersion}</a
+									href={`https://github.com/${dProject?.repository.owner}/${dProject?.repository.repository}/releases/tag/v${targetVersion}`}
+									>{targetVersion}</a
 								>{/if}
 							{#if dependencyVersionIsDifferent && dProject}
 								<button
