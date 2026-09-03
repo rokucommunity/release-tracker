@@ -2,10 +2,9 @@
 	import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 	import { throttling } from '@octokit/plugin-throttling';
 	import { type Project, getAllProjects } from './projects';
-	import { createClassFactory, resolveTargetDependencyVersion, sleep } from './util';
+	import { createClassFactory, getRequiredLookup, resolveTargetDependencyVersion, sleep } from './util';
 	import { http } from './http';
 	import * as localforage from 'localforage';
-	import * as semver from 'semver';
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
@@ -526,41 +525,83 @@
 		);
 	}
 
-	/** How long (ms) to trust a cached npm version list. Published versions are append-only, so this is cheap to cache. */
-	const NPM_VERSIONS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+	/**
+	 * De-dupes calls within a single refresh, so the registry is hit at most once per package even though
+	 * the resolve pass runs after every project hydration. Cleared at the start of each refresh -- a newly
+	 * published version is exactly what we're watching for, so every refresh re-asks the registry.
+	 */
+	let npmVersionsCache: Record<string, Promise<string[] | undefined>> = {};
 
 	/**
-	 * De-dupes concurrent/repeat calls within a page load, so the registry is hit at most once per package
-	 * even though the resolve pass runs after every project hydration.
+	 * Versions we have previously seen published, per package. Safe to persist forever and never needs
+	 * invalidating: npm versions are immutable, so "we saw 4.0.0-alpha.6 exist" stays true.
+	 *
+	 * IMPORTANT: this is positive evidence ONLY. A hit means "definitely published". A miss means
+	 * "we haven't looked recently" -- NEVER "not published" -- so a miss must always fall through to the
+	 * registry. Only use it to answer "does this exact version exist?"; it can't answer "what's the newest?"
+	 * since that changes the moment something new is published.
 	 */
-	const npmVersionsCache: Record<string, Promise<string[] | undefined>> = {};
+	let knownPublishedVersions: Record<string, Set<string>> = {};
+
+	const KNOWN_PUBLISHED_VERSIONS_CACHE_KEY = 'npm-known-published-versions';
+
+	async function loadKnownPublishedVersions() {
+		try {
+			const cached = await localforage.getItem<Record<string, string[]>>(KNOWN_PUBLISHED_VERSIONS_CACHE_KEY);
+			for (const [packageName, versions] of Object.entries(cached ?? {})) {
+				knownPublishedVersions[packageName] = new Set(versions);
+			}
+		} catch (e) {
+			console.warn('Failed to load the known-published-versions cache', e);
+		}
+	}
+
+	function rememberPublishedVersions(packageName: string, versions: string[]) {
+		const set = (knownPublishedVersions[packageName] ??= new Set());
+		for (const version of versions) {
+			set.add(version);
+		}
+		//fire-and-forget; a failed write just means we re-ask the registry next time
+		localforage
+			.setItem(
+				KNOWN_PUBLISHED_VERSIONS_CACHE_KEY,
+				Object.fromEntries(Object.entries(knownPublishedVersions).map(([name, v]) => [name, [...v]]))
+			)
+			.catch((e) => console.warn('Failed to persist the known-published-versions cache', e));
+	}
+
+	/**
+	 * Does this exact version exist on npm? Answered from cache when we've already seen it published,
+	 * otherwise by asking the registry. A cache miss never short-circuits to `false`.
+	 */
+	async function npmVersionExists(packageName: string, version: string): Promise<boolean> {
+		if (knownPublishedVersions[packageName]?.has(version)) {
+			return true;
+		}
+		return (await fetchNpmVersions(packageName))?.includes(version) ?? false;
+	}
 
 	/**
 	 * Fetch every published version of an npm package. This is a plain CORS GET against the registry's
 	 * abbreviated metadata document -- it does NOT touch the GitHub API, so it costs no GitHub rate limit.
-	 * Results are cached in localStorage for `NPM_VERSIONS_CACHE_TTL`. Returns undefined on failure so
-	 * callers can fall back rather than fail hydration.
+	 * Cache-busted so a version published seconds ago is visible immediately. Returns undefined on failure
+	 * so callers can fall back rather than fail hydration.
 	 */
 	function fetchNpmVersions(packageName: string): Promise<string[] | undefined> {
 		return (npmVersionsCache[packageName] ??= (async () => {
-			const cacheKey = `npm-versions: ${packageName}`;
 			try {
-				const cached = await localforage.getItem<{ versions: string[]; fetchedAt: number }>(cacheKey);
-				if (cached && Date.now() - cached.fetchedAt < NPM_VERSIONS_CACHE_TTL) {
-					return cached.versions;
-				}
-			} catch (e) {
-				console.warn(`Failed to read cached npm versions for ${packageName}`, e);
-			}
-			try {
-				const response = await fetch(`https://registry.npmjs.org/${packageName.replace('/', '%2F')}`, {
-					headers: { Accept: 'application/vnd.npm.install-v1+json' }
-				});
+				const response = await fetch(
+					`https://registry.npmjs.org/${packageName.replace('/', '%2F')}?nocache=${Date.now()}`,
+					{
+						headers: { Accept: 'application/vnd.npm.install-v1+json' },
+						cache: 'no-store'
+					}
+				);
 				if (!response.ok) {
 					throw new Error(`HTTP error! status: ${response.status}`);
 				}
 				const versions = Object.keys((await response.json())?.versions ?? {});
-				await localforage.setItem(cacheKey, { versions, fetchedAt: Date.now() });
+				rememberPublishedVersions(packageName, versions);
 				return versions;
 			} catch (e) {
 				console.error(`Failed to fetch npm versions for ${packageName}`, e);
@@ -678,27 +719,21 @@
 	 * depend on a prerelease that's ahead of that tip (i.e. `roku-deploy@4.0.0-alpha.5` vs a `3.18.4` tip).
 	 */
 	async function resolveDependencyTargetVersions(project: Project) {
-		//the npm version list is only needed to resolve a prerelease dependency, so most projects can be
-		//resolved synchronously without touching the network at all
-		const needsNpmVersions = (dep: Project['dependencies'][0]) =>
-			!!dep.versionFromLatestRelease && semver.prerelease(dep.versionFromLatestRelease) !== null;
-
-		const resolve = (dep: Project['dependencies'][0], availableDependencyVersions?: string[]) => {
-			dep.targetVersion = resolveTargetDependencyVersion({
-				projectVersion: project.currentVersion,
-				currentDependencyVersion: dep.versionFromLatestRelease,
-				latestDependencyVersion: findDependency(dep)?.currentVersion,
-				availableDependencyVersions
-			});
-		};
-
-		for (const dep of project.dependencies.filter((x) => !needsNpmVersions(x))) {
-			resolve(dep);
-		}
 		await Promise.all(
-			project.dependencies
-				.filter(needsNpmVersions)
-				.map(async (dep) => resolve(dep, await fetchNpmVersions(dep.name)))
+			project.dependencies.map(async (dep) => {
+				//ask for the cheapest lookup that can answer this dependency's question
+				const lookup = getRequiredLookup(project.currentVersion, dep.versionFromLatestRelease);
+				dep.targetVersion = resolveTargetDependencyVersion({
+					projectVersion: project.currentVersion,
+					currentDependencyVersion: dep.versionFromLatestRelease,
+					latestDependencyVersion: findDependency(dep)?.currentVersion,
+					//a yes/no about one immutable version, so a previously-seen 'yes' avoids the request
+					lockstepVersionExists:
+						lookup.kind === 'exists' ? await npmVersionExists(dep.name, lookup.lockstepVersion!) : undefined,
+					//"newest on this line" changes the moment something is published, so this must be live
+					availableDependencyVersions: lookup.kind === 'list' ? await fetchNpmVersions(dep.name) : undefined
+				});
+			})
 		);
 	}
 
@@ -792,6 +827,12 @@
 		const handledProjects = options?.handledProjects ?? [];
 		const refreshDependencies = options?.refreshDependencies ?? true;
 
+		//this is the start of a new refresh (rather than a recursive call into a dependency), so drop any
+		//npm version lists we fetched previously -- a refresh must always see versions published since.
+		if (options?.handledProjects === undefined) {
+			npmVersionsCache = {};
+		}
+
 		//if we have already refreshed this project, don't do it again
 		if (handledProjects.includes(project)) {
 			return;
@@ -836,6 +877,8 @@
 	}
 
 	async function hydrateProjects() {
+		//load the known-published-versions cache first so hydration can skip existence checks it already knows
+		await loadKnownPublishedVersions();
 		let handledProjects: Project[] = [];
 		for (const project of projects) {
 			//skip projects in collapsed release lines to save network requests; they'll be hydrated

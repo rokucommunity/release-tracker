@@ -54,11 +54,50 @@ export function getLatestPrereleaseVersion(currentVersion: string, availableVers
  *                                    resolve cases 1 and 2; when omitted those cases fall back to the
  *                                    current version rather than guessing at an unpublished version.
  */
+/**
+ * What kind of npm lookup does `resolveTargetDependencyVersion` need for this pair? Lets a caller pick the
+ * cheapest source that can actually answer the question:
+ *
+ * - `none` -- the answer doesn't depend on what's published, so don't hit the network at all.
+ * - `exists` -- we only need a yes/no on `lockstepVersion`. Answerable from a cache of versions already
+ *   seen published, since npm versions are immutable (a cache MISS still has to ask the registry).
+ * - `list` -- we need the newest version on a prerelease line, which changes the instant something is
+ *   published. Never answerable from a cache; must be a live request.
+ *
+ * Kept next to the resolver (and covered by the same tests) so the two can't drift apart -- claiming a
+ * cheaper lookup than the resolver needs silently produces a wrong target version.
+ */
+export function getRequiredLookup(projectVersion: string | undefined, currentDependencyVersion: string | undefined): {
+  kind: 'none' | 'exists' | 'list';
+  lockstepVersion?: string;
+} {
+  if (!currentDependencyVersion || !semver.valid(currentDependencyVersion)) {
+    //case 3 (`latest`)
+    return { kind: 'none' };
+  }
+  //case 1: we're a prerelease and the dependency carries the same suffix, so the only open question is
+  //whether the single next lockstep version has been published
+  const projectPreidBuildKey =
+    projectVersion && semver.prerelease(projectVersion) ? projectVersion.split('-')[1] : undefined;
+  if (projectPreidBuildKey && semver.prerelease(currentDependencyVersion) && currentDependencyVersion.endsWith(projectPreidBuildKey)) {
+    const lockstepVersion = semver.inc(currentDependencyVersion, 'prerelease') ?? undefined;
+    return lockstepVersion ? { kind: 'exists', lockstepVersion } : { kind: 'none' };
+  }
+  //case 2: the dependency is on a prerelease line we're not locked to; we need the whole line, live
+  if (semver.prerelease(currentDependencyVersion)) {
+    return { kind: 'list' };
+  }
+  //case 3 (`latest`)
+  return { kind: 'none' };
+}
+
 export function resolveTargetDependencyVersion(options: {
   projectVersion: string | undefined;
   currentDependencyVersion: string | undefined;
   latestDependencyVersion: string | undefined;
   availableDependencyVersions?: string[];
+  /** Whether the next lockstep version is published. Only consulted in the lockstep case (see `getRequiredLookup`). */
+  lockstepVersionExists?: boolean;
 }): string | undefined {
   const { projectVersion, currentDependencyVersion, latestDependencyVersion, availableDependencyVersions } = options;
 
@@ -74,9 +113,11 @@ export function resolveTargetDependencyVersion(options: {
   let target: string | undefined;
 
   if (projectPreidBuildKey && semver.prerelease(currentDependencyVersion) && currentDependencyVersion.endsWith(projectPreidBuildKey)) {
-    //case 1: lockstep. move both to the same next prerelease number, but only if it's actually published
+    //case 1: lockstep. move both to the same next prerelease number, but only if it's actually published.
+    //`lockstepVersionExists` lets the caller answer that from cache; fall back to the full list when given one.
     const nextVersion = semver.inc(currentDependencyVersion, 'prerelease') ?? undefined;
-    if (nextVersion && availableDependencyVersions?.includes(nextVersion)) {
+    const exists = options.lockstepVersionExists ?? (nextVersion ? availableDependencyVersions?.includes(nextVersion) : false);
+    if (nextVersion && exists) {
       target = nextVersion;
     }
   } else if (semver.prerelease(currentDependencyVersion)) {
