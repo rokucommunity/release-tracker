@@ -54,6 +54,12 @@ export interface Project {
      * The version of the dependency that this project last released with
      */
     versionFromLatestRelease?: string;
+    /**
+     * The version this dependency would be bumped to on this project's next release. Usually the tip of the
+     * dependency's release line, but prerelease lines and lockstep prereleases change that (and a bump that
+     * would be a downgrade is never taken). See `resolveTargetDependencyVersion`.
+     */
+    targetVersion?: string;
   }>;
 
   /**
