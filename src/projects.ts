@@ -222,8 +222,9 @@ export function getAllProjects(): Project[] {
           releaseLine: 'mainline'
         },
         {
+          //declares ^4.0.0-alpha.x, which only the v4 line publishes (mainline roku-deploy is 3.x)
           name: 'roku-deploy',
-          releaseLine: 'mainline'
+          releaseLine: 'roku-deploy-v4'
         }
       ]
     },
@@ -246,8 +247,9 @@ export function getAllProjects(): Project[] {
           releaseLine: 'mainline'
         },
         {
+          //declares ^4.0.0-alpha.x, which only the v4 line publishes (mainline roku-deploy is 3.x)
           name: 'roku-deploy',
-          releaseLine: 'mainline'
+          releaseLine: 'roku-deploy-v4'
         },
         {
           name: '@rokucommunity/bslint',
@@ -366,8 +368,9 @@ export function getAllProjects(): Project[] {
       },
       dependencies: [
         {
+          //declares ^4.0.0-alpha.x, which only the v4 line publishes (mainline roku-deploy is 3.x)
           name: 'roku-deploy',
-          releaseLine: 'mainline'
+          releaseLine: 'roku-deploy-v4'
         },
         {
           name: 'roku-debug',
@@ -434,10 +437,11 @@ export function getAllProjects(): Project[] {
           name: '@rokucommunity/bslint',
           releaseLine: 'mainline'
         },
-        {
-          name: 'rooibos-roku',
-          releaseLine: 'mainline'
-        },
+        //NOTE: promises devDepends on `rooibos-roku` (for its own tests), but rooibos depends on
+        //promises at runtime. Tracking both directions makes a cycle, which collapses this whole
+        //group into one tier and loses the real ordering. rooibos should always ship against the
+        //latest promises, so that direction is the one that matters; promises is fine lagging a
+        //release behind on rooibos, so the promises -> rooibos edge is deliberately not tracked.
         {
           name: 'ropm',
           releaseLine: 'mainline'
@@ -461,11 +465,17 @@ export function getAllProjects(): Project[] {
           releaseLine: 'mainline'
         },
         {
+          //declares ^4.0.0-alpha.x, which only the v4 line publishes (mainline roku-deploy is 3.x)
           name: 'roku-deploy',
-          releaseLine: 'mainline'
+          releaseLine: 'roku-deploy-v4'
         },
         {
           name: 'roku-debug',
+          releaseLine: 'mainline'
+        },
+        {
+          //declared as an npm alias (`"rooibos_promises": "npm:@rokucommunity/promises@^0.5.0"`)
+          name: '@rokucommunity/promises',
           releaseLine: 'mainline'
         },
         {
@@ -629,6 +639,12 @@ export function getAllProjects(): Project[] {
         },
         {
           name: 'roku-debug',
+          releaseLine: 'mainline'
+        },
+        {
+          //declared as an npm alias (`"rooibos_promises": "npm:@rokucommunity/promises@^0.7.0"`).
+          //promises has no v1 line, so this points at mainline.
+          name: '@rokucommunity/promises',
           releaseLine: 'mainline'
         },
         {
