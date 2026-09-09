@@ -248,6 +248,10 @@ export function getAllProjects(): Project[] {
         {
           name: 'roku-deploy',
           releaseLine: 'mainline'
+        },
+        {
+          name: '@rokucommunity/bslint',
+          releaseLine: 'mainline'
         }
       ]
     },
@@ -312,6 +316,10 @@ export function getAllProjects(): Project[] {
         branch: 'master',
       },
       dependencies: [
+        {
+          name: '@rokucommunity/logger',
+          releaseLine: 'mainline'
+        },
         {
           name: 'brighterscript',
           releaseLine: 'mainline'
@@ -421,6 +429,18 @@ export function getAllProjects(): Project[] {
         {
           name: 'roku-deploy',
           releaseLine: 'mainline'
+        },
+        {
+          name: '@rokucommunity/bslint',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'rooibos-roku',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'ropm',
+          releaseLine: 'mainline'
         }
       ]
     },
@@ -446,6 +466,14 @@ export function getAllProjects(): Project[] {
         },
         {
           name: 'roku-debug',
+          releaseLine: 'mainline'
+        },
+        {
+          name: '@rokucommunity/bslint',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'ropm',
           releaseLine: 'mainline'
         }
       ]
@@ -486,6 +514,14 @@ export function getAllProjects(): Project[] {
         },
         {
           name: 'brighterscript',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'rooibos-roku',
+          releaseLine: 'mainline'
+        },
+        {
+          name: 'ropm',
           releaseLine: 'mainline'
         }
       ]
@@ -593,6 +629,14 @@ export function getAllProjects(): Project[] {
         },
         {
           name: 'roku-debug',
+          releaseLine: 'mainline'
+        },
+        {
+          name: '@rokucommunity/bslint',
+          releaseLine: 'bsc-v1'
+        },
+        {
+          name: 'ropm',
           releaseLine: 'mainline'
         }
       ]
