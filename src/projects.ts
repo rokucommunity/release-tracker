@@ -106,6 +106,13 @@ export interface Project {
   vscodeExtensionId?: string;
 
   /**
+   * Does this repo use the shared rokucommunity/workflows release + security-audit setup? Defaults to `true`.
+   * Set to `false` for non-RokuCommunity repos: the card then hides the security-audit badge and links the
+   * release button to the repo's compare view instead of the (nonexistent) `initialize-release.yml` workflow.
+   */
+  usesRokuCommunityWorkflows?: boolean;
+
+  /**
    * Should all commits be shown in the UI for this project? Or just up to the first `MAX_COLLAPSED_COMMITS`
    */
   showAllCommits?: boolean;
@@ -654,6 +661,26 @@ export function getAllProjects(): Project[] {
         {
           name: 'ropm',
           releaseLine: 'mainline'
+        }
+      ]
+    },
+    {
+      //not a RokuCommunity repo (maintained by markwpearce), released by hand via `release-it`
+      name: 'brighterscript-jsdocs-plugin',
+      projectType: 'npm',
+      usesRokuCommunityWorkflows: false,
+      repository: {
+        owner: 'markwpearce',
+        repository: 'brighterscript-jsdocs-plugin'
+      },
+      releaseLine: {
+        name: 'bsc-v1',
+        branch: 'v1'
+      },
+      dependencies: [
+        {
+          name: 'brighterscript',
+          releaseLine: 'bsc-v1'
         }
       ]
     },
