@@ -665,7 +665,7 @@
 		});
 
 		project.unreleasedCommits = await fetchUnreleasedCommits(project);
-		project.ciStatus = await fetchCiStatus(project);
+		project.ciStatus = project.usesRokuCommunityWorkflows === false ? 'unknown' : await fetchCiStatus(project);
 
 		//now update the dependencies
 		for (const dependency of project.dependencies) {
@@ -1034,6 +1034,7 @@
 						</svg>
 					</a>
 				{/if}
+				{#if project.usesRokuCommunityWorkflows !== false}
 				<a
 					class="status-badge status-badge-{project.ciStatus ?? 'unknown'}"
 					target="_blank"
@@ -1046,6 +1047,7 @@
 						<path d="M5 8V5a3 3 0 0 1 6 0v3" fill="none" stroke="white" stroke-width="2" />
 					</svg>
 				</a>
+				{/if}
 			</span>
 			<a
 				class="button release-status-button"
@@ -1053,10 +1055,14 @@
 				target="_blank"
 				title={project.releaseInProgress
 					? `A release for v${project.releaseInProgress.version} is already open — no need to start a new one. Click to view it.`
-					: undefined}
+					: project.usesRokuCommunityWorkflows === false
+						? `${project.repository.owner}/${project.repository.repository} doesn't use the RokuCommunity release workflow; ask its maintainer to release it.`
+						: undefined}
 				href={project.releaseInProgress
 					? project.releaseInProgress.url
-					: `https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
+					: project.usesRokuCommunityWorkflows === false
+						? `https://github.com/${project.repository.owner}/${project.repository.repository}/compare/v${project.currentVersion}...${project.releaseLine.branch}`
+						: `https://github.com/${project?.repository.owner}/${project?.repository.repository}/actions/workflows/initialize-release.yml`}
 			>
 				{#if project.loadFailed}
 					Load failed
