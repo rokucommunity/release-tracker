@@ -5,6 +5,7 @@
 	import { createClassFactory, getRequiredLookup, resolveTargetDependencyVersion, sleep } from './util';
 	import { http } from './http';
 	import * as localforage from 'localforage';
+	import { tick } from 'svelte';
 
 	const MAX_COLLAPSED_COMMITS = 4;
 
@@ -906,6 +907,57 @@
 		}
 	}
 
+	/**
+	 * Build the anchor id for a release line header (e.g. `bsc-v1`)
+	 */
+	function getReleaseLineAnchorId(releaseLine: string) {
+		return releaseLine.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+	}
+
+	/**
+	 * Build the anchor id for a tier within a release line (e.g. `bsc-v1-tier-2`). `tierNumber` is 1-based, matching the label.
+	 */
+	function getTierAnchorId(releaseLine: string, tierNumber: number) {
+		return `${getReleaseLineAnchorId(releaseLine)}-tier-${tierNumber}`;
+	}
+
+	/**
+	 * Make sure the element targeted by the url hash is actually rendered: expand its release line if collapsed,
+	 * and switch to the release flow view if it points at a tier (tiers only exist in that view).
+	 * @param isInitialLoad when true, skip lazy hydration since `hydrateProjects()` is about to run anyway
+	 */
+	async function revealHashTarget(isInitialLoad = false) {
+		const hash = decodeURIComponent(window.location.hash.slice(1));
+		if (!hash) {
+			return;
+		}
+		const isTierTarget = /-tier-\d+$/.test(hash);
+		const releaseLine = releaseLines.find((x) => {
+			const id = getReleaseLineAnchorId(x);
+			return hash === id || (isTierTarget && hash.startsWith(`${id}-tier-`));
+		});
+		if (!releaseLine) {
+			return;
+		}
+		if (isTierTarget && viewMode !== 'release-flow') {
+			setViewMode('release-flow');
+		}
+		if (collapsedReleaseLines[releaseLine]) {
+			if (isInitialLoad) {
+				collapsedReleaseLines = { ...collapsedReleaseLines, [releaseLine]: false };
+				localStorage.setItem(COLLAPSED_RELEASE_LINES_KEY, JSON.stringify(collapsedReleaseLines));
+			} else {
+				toggleReleaseLineCollapsed(releaseLine);
+			}
+		}
+		//wait for the newly revealed elements to render before scrolling to them
+		await tick();
+		document.getElementById(hash)?.scrollIntoView();
+	}
+
+	revealHashTarget(true);
+	window.addEventListener('hashchange', () => revealHashTarget());
+
 	//temporarily only keep one of the projects to keep our rate limit down during testing
 	hydrateProjects();
 </script>
@@ -1191,7 +1243,10 @@
 	<div class="content">
 		{#each releaseLines as releaseLine}
 			<div class="releaseline-container {getReleaseLineClass(releaseLine)} {collapsedReleaseLines[releaseLine] ? 'collapsed' : 'expanded'}">
-				<h2 class="releaseline-header" onclick={() => toggleReleaseLineCollapsed(releaseLine)}>{releaseLine}</h2>
+				<h2 class="releaseline-header" id={getReleaseLineAnchorId(releaseLine)} onclick={() => toggleReleaseLineCollapsed(releaseLine)}>
+					<span>{releaseLine}</span>
+					<a class="anchor-link" href="#{getReleaseLineAnchorId(releaseLine)}" title="Link to this release line" onclick={(e) => e.stopPropagation()}>#</a>
+				</h2>
 
 				{#if viewMode === 'default'}
 					<div class="cards-container">
@@ -1204,10 +1259,11 @@
 					{@const tiers = computeTiers(releaseLineProjects, projects)}
 					{#each tiers as tierData, tierIndex}
 						{@const status = getTierStatus(releaseLine, tierIndex, tiers)}
-						<div class="tier-container tier-{status}">
+						<div class="tier-container tier-{status}" id={getTierAnchorId(releaseLine, tierData.tier + 1)}>
 							<div class="tier-header">
 								<span class="tier-label">Tier {tierData.tier + 1}</span>
 								<span class="tier-status">{getTierStatusLabel(status)}</span>
+								<a class="anchor-link" href="#{getTierAnchorId(releaseLine, tierData.tier + 1)}" title="Link to this tier">#</a>
 							</div>
 							<div class="cards-container">
 								{#each tierData.projects as project}
@@ -1711,6 +1767,22 @@
 		background-color: var(--releaseline-tag-bg);
 		margin-top: 0;
 		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.anchor-link {
+		margin-left: auto;
+		padding: 0 0.4rem;
+		color: inherit;
+		text-decoration: none;
+		opacity: 0.4;
+	}
+
+	.anchor-link:hover {
+		opacity: 1;
+		text-decoration: underline;
 	}
 
 	.releaseline-container {
